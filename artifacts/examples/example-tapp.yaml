@@ -1,0 +1,14 @@
+apiVersion: tkestack.io/v1
+kind: TApp
+metadata:
+  name: example-tapp
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: example-tapp
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.7.9

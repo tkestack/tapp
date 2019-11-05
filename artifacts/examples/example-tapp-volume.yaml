@@ -1,0 +1,28 @@
+apiVersion: tkestack.io/v1
+kind: TApp
+metadata:
+  name: example-tapp
+spec:
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: example-tapp
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.7.9
+        volumeMounts:
+        - name: www
+          mountPath: /usr/share/nginx/html
+  volumeClaimTemplates:
+  - metadata:
+      name: www
+      labels:
+        app: example-tapp
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: xfs-rbd
+      resources:
+        requests:
+          storage: 1Gi
