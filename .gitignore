@@ -1,0 +1,4 @@
+.version-defs
+bin/**/*
+go/**/*
+/.idea

@@ -157,7 +157,7 @@ type TAppStatus struct {
           - name: nginx
             image: nginx:1.7.9
     templates:
-  	   "1": "test"
+      "1": "test"
   ```
 
 ### 2.2 Get tapp
