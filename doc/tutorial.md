@@ -110,7 +110,7 @@ type TAppStatus struct {
 
   ```yaml
   $ cat tapp.yaml
-  apiVersion: tkestack.io/v1
+  apiVersion: apps.tkestack.io/v1
   kind: TApp
   metadata:
     name: example-tapp
@@ -133,7 +133,7 @@ type TAppStatus struct {
 
   ```yaml
   $ cat tapp.yaml
-  apiVersion: tkestack.io/v1
+  apiVersion: apps.tkestack.io/v1
   kind: TApp
   metadata:
     name: example-tapp
@@ -183,7 +183,7 @@ Tapp controller will do **in-place update** for pod if only containers' images a
   ```yaml
   $ # edit tapp.yaml, update pod 1 to use template test2.
   $ cat tapp.yaml
-  apiVersion: tkestack.io/v1
+  apiVersion: apps.tkestack.io/v1
   kind: TApp
   metadata:
     name: example-tapp
@@ -218,7 +218,7 @@ Tapp controller will do **in-place update** for pod if only containers' images a
   ```yaml
   $ # edit tapp.yaml, update pod 1 to use template test2.
   $ cat tapp.yaml
-  apiVersion: tkestack.io/v1
+  apiVersion: apps.tkestack.io/v1
   kind: TApp
   metadata:
     name: example-tapp
@@ -257,7 +257,7 @@ Specify pod's status in `spec.statuses`, and tapp controller will reconcile it, 
 ```yaml
 $ # edit tapp.yaml, kill pod 1.
 $ cat tapp.yaml
-apiVersion: tkestack.io/v1
+apiVersion: apps.tkestack.io/v1
 kind: TApp
 metadata:
   name: example-tapp

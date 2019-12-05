@@ -53,4 +53,4 @@ $ kubectl get pods
 
 You can clean up the created CustomResourceDefinition with:
 
-    $ kubectl delete crd tapps.tkestack.io
+    $ kubectl delete crd tapps.apps.tkestack.io

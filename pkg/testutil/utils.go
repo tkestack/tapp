@@ -158,7 +158,7 @@ func CreateRawTApp(replica int) *v1.TApp {
 	}
 
 	return &v1.TApp{
-		TypeMeta:   metav1.TypeMeta{Kind: "TApp", APIVersion: "tkestack.io/v1"},
+		TypeMeta:   metav1.TypeMeta{Kind: "TApp", APIVersion: "apps.tkestack.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: FakeTAppName, Namespace: corev1.NamespaceDefault, ResourceVersion: "0"},
 		Spec:       validTAppSpec,
 		Status:     v1.TAppStatus{Statuses: map[string]v1.InstanceStatus{}},
