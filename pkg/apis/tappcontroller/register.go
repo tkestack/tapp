@@ -18,5 +18,5 @@
 package tappcontroller
 
 const (
-	GroupName = "tkestack.io"
+	GroupName = "apps.tkestack.io"
 )
