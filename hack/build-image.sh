@@ -20,7 +20,7 @@ fi
 
 go get github.com/mitchellh/gox
 
-cd $GOPATH/src/$API_GO_PACKAGE/tapp
+cd $ROOT
 CGO_ENABLED=0 gox -osarch="linux/amd64" -ldflags "$(api::version::ldflags)" \
 	-output=$BIN
 docker build build/docker/ -t tkestack/tapp-controller:v1.0.0

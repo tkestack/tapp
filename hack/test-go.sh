@@ -12,7 +12,7 @@ echo "GOPATH $GOPATH"
 
 TIMEOUT=${TIMEOUT:-5m}
 
-cd $GOPATH/src/tkestack.io/tapp
+cd $ROOT
 
 packages=$(find . -name *_test.go -print0 | xargs -0n1 dirname | sed 's|^\./||' | sort -u | grep -v e2e)
 for i in $packages
