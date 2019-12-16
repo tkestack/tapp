@@ -17,7 +17,7 @@ else
   api::version::save_version_vars "${GIT_VERSION_FILE}"
 fi
 
-cd $GOPATH/src/$API_GO_PACKAGE/tapp
+cd $ROOT
 go build -o bin/tapp-controller -ldflags "$(api::version::ldflags)" .
 if [ $? -eq 0 ]; then
   echo "Build success!"
