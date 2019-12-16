@@ -22,9 +22,9 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/golang/glog"
 	"k8s.io/api/admission/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog"
 )
 
 // ToAdmissionResponse is a helper function to create an AdmissionResponse
@@ -51,12 +51,12 @@ func Serve(w http.ResponseWriter, r *http.Request, admitter func(*v1beta1.Admiss
 	// verify the content type is accurate
 	contentType := r.Header.Get("Content-Type")
 	if contentType != "application/json" {
-		glog.Errorf("contentType=%s, expect application/json", contentType)
+		klog.Errorf("contentType=%s, expect application/json", contentType)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	glog.V(4).Infof("Handling request: %s", body)
+	klog.V(4).Infof("Handling request: %s", body)
 
 	// The AdmissionReview that was sent to the webhook
 	requestedAdmissionReview := v1beta1.AdmissionReview{}
@@ -65,7 +65,7 @@ func Serve(w http.ResponseWriter, r *http.Request, admitter func(*v1beta1.Admiss
 	responseAdmissionReview := v1beta1.AdmissionReview{}
 
 	if err := json.Unmarshal(body, &requestedAdmissionReview); err != nil {
-		glog.Errorf("Failed to unmarshal %s: %v", body, err)
+		klog.Errorf("Failed to unmarshal %s: %v", body, err)
 		responseAdmissionReview.Response = ToAdmissionResponse(err)
 	} else {
 		// pass to admitFunc
@@ -75,13 +75,13 @@ func Serve(w http.ResponseWriter, r *http.Request, admitter func(*v1beta1.Admiss
 	// Return the same UID
 	responseAdmissionReview.Response.UID = requestedAdmissionReview.Request.UID
 
-	glog.V(4).Infof("Sending response: %v", responseAdmissionReview.Response)
+	klog.V(4).Infof("Sending response: %v", responseAdmissionReview.Response)
 
 	respBytes, err := json.Marshal(responseAdmissionReview)
 	if err != nil {
-		glog.Errorf("Failed to marshal response %+v: %v", responseAdmissionReview, err)
+		klog.Errorf("Failed to marshal response %+v: %v", responseAdmissionReview, err)
 	}
 	if _, err := w.Write(respBytes); err != nil {
-		glog.Errorf("Failed to write response %s: %v", respBytes, err)
+		klog.Errorf("Failed to write response %s: %v", respBytes, err)
 	}
 }

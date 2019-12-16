@@ -26,7 +26,6 @@ import (
 	tappv1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
 	"tkestack.io/tapp/pkg/util"
 
-	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -37,6 +36,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/klog"
 )
 
 const (
@@ -145,9 +145,9 @@ func (p *InstanceSyncer) SyncInstances(add, del, forceDel, update []*Instance) {
 		go func(instance *Instance) {
 			defer wg.Done()
 			if err := p.createInstance(instance); err != nil {
-				glog.Errorf("Failed to createInstance %s: %+v", instance.getName(), err)
+				klog.Errorf("Failed to createInstance %s: %+v", instance.getName(), err)
 			} else {
-				glog.V(2).Infof("Create instance %s successfully", instance.getName())
+				klog.V(2).Infof("Create instance %s successfully", instance.getName())
 			}
 		}(instance)
 	}
@@ -156,9 +156,9 @@ func (p *InstanceSyncer) SyncInstances(add, del, forceDel, update []*Instance) {
 		go func(instance *Instance) {
 			defer wg.Done()
 			if err := p.deleteInstance(instance); err != nil {
-				glog.Errorf("Failed to delInstance %s: %v", instance.getName(), err)
+				klog.Errorf("Failed to delInstance %s: %v", instance.getName(), err)
 			} else {
-				glog.V(2).Infof("Delete instance %s successfully", instance.getName())
+				klog.V(2).Infof("Delete instance %s successfully", instance.getName())
 			}
 		}(instance)
 	}
@@ -167,9 +167,9 @@ func (p *InstanceSyncer) SyncInstances(add, del, forceDel, update []*Instance) {
 		go func(instance *Instance) {
 			defer wg.Done()
 			if err := p.forceDeleteInstance(instance); err != nil {
-				glog.Errorf("Failed to forceDelInstance %s: %v", instance.getName(), err)
+				klog.Errorf("Failed to forceDelInstance %s: %v", instance.getName(), err)
 			} else {
-				glog.V(2).Infof("Force delete instance %s successfully", instance.getName())
+				klog.V(2).Infof("Force delete instance %s successfully", instance.getName())
 			}
 		}(instance)
 	}
@@ -178,9 +178,9 @@ func (p *InstanceSyncer) SyncInstances(add, del, forceDel, update []*Instance) {
 
 	for _, instance := range update {
 		if err := p.updateInstance(instance); err != nil {
-			glog.Errorf("Failed to updateInstance %s: %v", instance.getName(), err)
+			klog.Errorf("Failed to updateInstance %s: %v", instance.getName(), err)
 		} else {
-			glog.V(2).Infof("Update instance %s successfully", instance.getName())
+			klog.V(2).Infof("Update instance %s successfully", instance.getName())
 		}
 	}
 }
@@ -219,7 +219,7 @@ func (p *InstanceSyncer) deleteInstance(ins *Instance) error {
 	if !p.isDying(real.pod) {
 		return p.InstanceClient.Delete(real, nil)
 	}
-	glog.V(2).Infof("Waiting on instance %s to die in %v", ins.getName(), real.pod.DeletionTimestamp)
+	klog.V(2).Infof("Waiting on instance %s to die in %v", ins.getName(), real.pod.DeletionTimestamp)
 	return nil
 }
 
@@ -284,7 +284,7 @@ func (p *ApiServerInstanceClient) Get(ins *Instance) (*Instance, bool, error) {
 }
 
 func (p *ApiServerInstanceClient) Delete(ins *Instance, options *metav1.DeleteOptions) error {
-	glog.V(2).Infof("Delete instance %s with option %+v", ins.getName(), options)
+	klog.V(2).Infof("Delete instance %s with option %+v", ins.getName(), options)
 	err := podClient(p.KubeClient, ins.parent.Namespace).Delete(ins.pod.Name, options)
 	if errors.IsNotFound(err) {
 		err = nil
@@ -294,7 +294,7 @@ func (p *ApiServerInstanceClient) Delete(ins *Instance, options *metav1.DeleteOp
 }
 
 func (p *ApiServerInstanceClient) Create(ins *Instance) error {
-	glog.V(2).Infof("Creating instance %s", ins.getName())
+	klog.V(2).Infof("Creating instance %s", ins.getName())
 	if err := p.createPersistentVolumeClaims(ins); err != nil {
 		return err
 	}
@@ -404,13 +404,13 @@ func (p *ApiServerInstanceClient) Update(real *Instance, expected *Instance) err
 	pod := real.pod
 	for i, rp := 0, real.pod; i <= updateRetries; i++ {
 		mergePod(rp, expected.pod)
-		glog.V(2).Infof("Updating pod %s, pod meta:%+v, pod spec:%+v", getPodFullName(rp), rp.ObjectMeta, rp.Spec)
+		klog.V(2).Infof("Updating pod %s, pod meta:%+v, pod spec:%+v", getPodFullName(rp), rp.ObjectMeta, rp.Spec)
 		_, err = pc.Update(rp)
 		if err == nil {
 			p.event(real.parent, "Update", fmt.Sprintf("Instance: %v", real.pod.Name), nil)
 			return nil
 		}
-		glog.Errorf("Failed to update pod %s, will retry: %v", getPodFullName(rp), err)
+		klog.Errorf("Failed to update pod %s, will retry: %v", getPodFullName(rp), err)
 		if rp, err = pc.Get(pod.Name, metav1.GetOptions{}); err != nil {
 			break
 		}
