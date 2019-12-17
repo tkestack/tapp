@@ -20,6 +20,7 @@ else
   api::version::save_version_vars "${GIT_VERSION_FILE}"
 fi
 
+export PATH=$PATH:$(go env GOPATH)/bin
 go get github.com/mitchellh/gox@v1.0.1
 
 cd $ROOT
