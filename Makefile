@@ -1,6 +1,5 @@
 .PHONY: all
-all: verify-gofmt
-	hack/build.sh
+all: verify-gofmt build test
 
 .PHONY: clean
 clean:
@@ -31,7 +30,12 @@ verify-gofmt:
 format:
 	hack/format.sh
 
-image: verify-gofmt
-	hack/build-image.sh
+build-image: verify-gofmt
+	hack/build-image.sh tkestack/tapp-controller:v1.0.0
+
+push-image:
+	hack/push-image.sh tkestack/tapp-controller:v1.0.0
+
+release: build-image push-image
 
 #  vim: set ts=2 sw=2 tw=0 noet :
