@@ -2,11 +2,9 @@
 
 TAPP is a CustomResourceDefinition(CRD) based app kind, it contains most features of kubernetes `deployment` and `statefulset`, and it is easy for users to run legacy applications on Kubernetes. Nowadays, many customers want to adopt Kubernetes, and migrate their legacy applications to Kubernetes. However they could not use Kubernetes’ workloads(e.g. `deployment`, `statefulset`) directly, and it will take a lot of effort to transform those applications to microservices. TAPP could solve these problems. 
 
-Tapp-controller is a controller for mananing TAPP resource.
-
 ## Features
 
-* Supports unique index for each instance(like `statefulset`)
+* Support unique index for each instance(same as `statefulset`)
 
 * Support operating(start/stop/upgrade) on specific instances(pods)
 
