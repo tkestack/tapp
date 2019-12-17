@@ -27,11 +27,11 @@ import (
 	"tkestack.io/tapp/pkg/apis/tappcontroller"
 	tappv1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
 
-	"github.com/golang/glog"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/klog"
 )
 
 const (
@@ -44,14 +44,14 @@ var failPolicy admissionregistrationv1beta1.FailurePolicyType = "Fail"
 // Register registers the validatingWebhookConfiguration to kube-apiserver
 // Note: always return err as nil, it will be used by wait.PollUntil().
 func Register(clientset *kubernetes.Clientset, namespace string, caFile string) (bool, error) {
-	glog.Infof("Starting to register validatingWebhookConfiguration")
+	klog.Infof("Starting to register validatingWebhookConfiguration")
 	defer func() {
-		glog.Infof("Finished registering validatingWebhookConfiguration")
+		klog.Infof("Finished registering validatingWebhookConfiguration")
 	}()
 
 	caCert, err := ioutil.ReadFile(caFile)
 	if err != nil {
-		glog.Errorf("Failed to read certificate authority from %s: %v", caFile, err)
+		klog.Errorf("Failed to read certificate authority from %s: %v", caFile, err)
 		return false, nil
 	}
 
@@ -87,16 +87,16 @@ func Register(clientset *kubernetes.Clientset, namespace string, caFile string) 
 	client := clientset.AdmissionregistrationV1beta1().ValidatingWebhookConfigurations()
 	if present, err := client.Get(validatingWebhookConfiguration, metav1.GetOptions{}); err == nil {
 		if !reflect.DeepEqual(present.Webhooks, webhookConfig.Webhooks) {
-			glog.V(1).Infof("Update validationWebhookConfiguration from %+v to %+v", present, webhookConfig)
+			klog.V(1).Infof("Update validationWebhookConfiguration from %+v to %+v", present, webhookConfig)
 			webhookConfig.ResourceVersion = present.ResourceVersion
 			if _, err := client.Update(webhookConfig); err != nil {
-				glog.Errorf("Failed to update validationWebhookConfiguration: %v", err)
+				klog.Errorf("Failed to update validationWebhookConfiguration: %v", err)
 				return false, nil
 			}
 		}
 	} else {
 		if _, err := client.Create(webhookConfig); err != nil {
-			glog.Errorf("Failed to create validatingWebhookConfiguration: %v", err)
+			klog.Errorf("Failed to create validatingWebhookConfiguration: %v", err)
 			return false, nil
 		}
 	}
@@ -133,11 +133,11 @@ func (ws *Server) Run(stopCh <-chan struct{}) {
 		Addr:    ws.listenAddress,
 		Handler: mux,
 	}
-	glog.Fatal(server.ListenAndServeTLS(ws.certFile, ws.keyFile))
+	klog.Fatal(server.ListenAndServeTLS(ws.certFile, ws.keyFile))
 }
 
 func admitTApp(ar *admissionv1beta1.AdmissionReview) *admissionv1beta1.AdmissionResponse {
-	glog.V(4).Info("Admitting tapp")
+	klog.V(4).Info("Admitting tapp")
 
 	reviewResponse := &admissionv1beta1.AdmissionResponse{}
 	reviewResponse.Allowed = true
@@ -145,7 +145,7 @@ func admitTApp(ar *admissionv1beta1.AdmissionReview) *admissionv1beta1.Admission
 	var tapp tappv1.TApp
 	raw := ar.Request.Object.Raw
 	if err := json.Unmarshal(raw, &tapp); err != nil {
-		glog.Errorf("Failed to unmarshal tapp from %s: %v", raw, err)
+		klog.Errorf("Failed to unmarshal tapp from %s: %v", raw, err)
 		return ToAdmissionResponse(err)
 	}
 

@@ -22,10 +22,10 @@ import (
 
 	"tkestack.io/tapp/pkg/apis/tappcontroller"
 
-	"github.com/golang/glog"
 	extensionsobj "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog"
 )
 
 var scaleLabelSelector = ".status.scaleLabelSelector"
@@ -66,25 +66,25 @@ func EnsureCRDCreated(client apiextensionsclient.Interface) (created bool, err e
 	presetCRD, err := crdClient.Get(CRD.Name, metav1.GetOptions{})
 	if err == nil {
 		if reflect.DeepEqual(presetCRD.Spec, CRD.Spec) {
-			glog.V(1).Infof("CRD %s already exists", CRD.Name)
+			klog.V(1).Infof("CRD %s already exists", CRD.Name)
 		} else {
-			glog.V(3).Infof("Update CRD %s: %+v -> %+v", CRD.Name, presetCRD.Spec, CRD.Spec)
+			klog.V(3).Infof("Update CRD %s: %+v -> %+v", CRD.Name, presetCRD.Spec, CRD.Spec)
 			newCRD := CRD
 			newCRD.ResourceVersion = presetCRD.ResourceVersion
 			// Update CRD
 			if _, err := crdClient.Update(newCRD); err != nil {
-				glog.Errorf("Error update CRD %s: %v", CRD.Name, err)
+				klog.Errorf("Error update CRD %s: %v", CRD.Name, err)
 				return false, nil
 			}
-			glog.V(1).Infof("Update CRD %s successfully.", CRD.Name)
+			klog.V(1).Infof("Update CRD %s successfully.", CRD.Name)
 		}
 	} else {
 		// If not exist, create a new one
 		if _, err := crdClient.Create(CRD); err != nil {
-			glog.Errorf("Error creating CRD %s: %v", CRD.Name, err)
+			klog.Errorf("Error creating CRD %s: %v", CRD.Name, err)
 			return false, nil
 		}
-		glog.V(1).Infof("Create CRD %s successfully.", CRD.Name)
+		klog.V(1).Infof("Create CRD %s successfully.", CRD.Name)
 	}
 
 	return true, nil

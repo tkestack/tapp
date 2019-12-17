@@ -32,7 +32,6 @@ import (
 	"tkestack.io/tapp/pkg/hash"
 	"tkestack.io/tapp/pkg/util"
 
-	"github.com/golang/glog"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -48,6 +47,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
+	"k8s.io/klog"
 )
 
 const controllerName = "tapp-controller"
@@ -117,9 +117,9 @@ func NewController(
 	// Add tapp-controller types to the default Kubernetes Scheme so Events can be
 	// logged for tapp-controller types.
 	tappscheme.AddToScheme(scheme.Scheme)
-	glog.V(4).Info("Creating event broadcaster")
+	klog.V(4).Info("Creating event broadcaster")
 	eventBroadcaster := record.NewBroadcaster()
-	eventBroadcaster.StartLogging(glog.Infof)
+	eventBroadcaster.StartLogging(klog.Infof)
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeclientset.CoreV1().Events("")})
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerName})
 
@@ -141,7 +141,7 @@ func NewController(
 		},
 	}
 
-	glog.Info("Setting up event handlers")
+	klog.Info("Setting up event handlers")
 
 	podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		// lookup the tapp and enqueue
@@ -159,7 +159,7 @@ func NewController(
 			oldTApp := old.(*tappv1.TApp)
 			curTApp := cur.(*tappv1.TApp)
 			if oldTApp.Status.Replicas != curTApp.Status.Replicas {
-				glog.V(4).Infof("Observed updated replica count for tapp %s: %d->%d",
+				klog.V(4).Infof("Observed updated replica count for tapp %s: %d->%d",
 					util.GetTAppFullName(curTApp), oldTApp.Status.Replicas, curTApp.Status.Replicas)
 			}
 			controller.enqueueTApp(cur)
@@ -182,23 +182,23 @@ func (c *Controller) Run(threadiness int, stopCh <-chan struct{}) error {
 	defer c.workqueue.ShutDown()
 
 	// Start the informer factories to begin populating the informer caches
-	glog.Info("Starting tapp controller")
+	klog.Info("Starting tapp controller")
 
 	// Wait for the caches to be synced before starting workers
-	glog.Info("Waiting for informer caches to sync")
+	klog.Info("Waiting for informer caches to sync")
 	if ok := cache.WaitForCacheSync(stopCh, c.podStoreSynced, c.tappsSynced); !ok {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
 
-	glog.Info("Starting workers")
+	klog.Info("Starting workers")
 	// Launch two workers to process TApp resources
 	for i := 0; i < threadiness; i++ {
 		go wait.Until(c.runWorker, time.Second, stopCh)
 	}
 
-	glog.Info("Started workers")
+	klog.Info("Started workers")
 	<-stopCh
-	glog.Info("Shutting down workers")
+	klog.Info("Shutting down workers")
 
 	return nil
 }
@@ -218,7 +218,7 @@ func (c *Controller) runWorker() {
 			}
 			defer c.workqueue.Done(key)
 			if err := c.syncHandler(key.(string)); err != nil {
-				glog.Errorf("Error syncing TApp %v, re-queuing: %v", key.(string), err)
+				klog.Errorf("Error syncing TApp %v, re-queuing: %v", key.(string), err)
 				c.workqueue.AddRateLimited(key)
 			} else {
 				c.workqueue.Forget(key)
@@ -230,7 +230,7 @@ func (c *Controller) runWorker() {
 // addPod adds the tapp for the pod to the sync workqueue
 func (c *Controller) addPod(obj interface{}) {
 	pod := obj.(*corev1.Pod)
-	glog.V(8).Infof("Pod %s created, labels: %+v", pod.Name, pod.Labels)
+	klog.V(8).Infof("Pod %s created, labels: %+v", pod.Name, pod.Labels)
 	if tapp, err := c.getTAppForPod(pod); err == nil {
 		c.enqueueTApp(tapp)
 	}
@@ -267,20 +267,20 @@ func (c *Controller) deletePod(obj interface{}) {
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
-			glog.Errorf("Couldn't get object from tombstone %+v", obj)
+			klog.Errorf("Couldn't get object from tombstone %+v", obj)
 			return
 		}
 		pod, ok = tombstone.Obj.(*corev1.Pod)
 		if !ok {
-			glog.Errorf("Tombstone contained object that is not a pod %+v", obj)
+			klog.Errorf("Tombstone contained object that is not a pod %+v", obj)
 			return
 		}
 	}
-	glog.V(8).Infof("Pod %s/%s deleted.", pod.Namespace, pod.Name)
+	klog.V(8).Infof("Pod %s/%s deleted.", pod.Namespace, pod.Name)
 	if tapp, err := c.getTAppForPod(pod); err == nil {
 		c.enqueueTApp(tapp)
 	} else {
-		glog.Errorf("Failed to get tapp for pod %s/%s", pod.Namespace, pod.Name)
+		klog.Errorf("Failed to get tapp for pod %s/%s", pod.Namespace, pod.Name)
 	}
 }
 
@@ -334,7 +334,7 @@ func (c *Controller) getTAppForPod(pod *corev1.Pod) (*tappv1.TApp, error) {
 	// Resolve a overlapping tapp tie by creation timestamp.
 	// Let's hope users don't create overlapping tapps.
 	if len(tapps) > 1 {
-		glog.Errorf("More than one TApp is selecting pods with labels: %+v", pod.Labels)
+		klog.Errorf("More than one TApp is selecting pods with labels: %+v", pod.Labels)
 		sort.Sort(overlappingTApps(tapps))
 	}
 	return tapps[0], nil
@@ -344,7 +344,7 @@ func (c *Controller) getTAppForPod(pod *corev1.Pod) (*tappv1.TApp, error) {
 func (c *Controller) enqueueTApp(obj interface{}) {
 	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
 	if err != nil {
-		glog.Errorf("Could not get key for object %+v: %v", obj, err)
+		klog.Errorf("Could not get key for object %+v: %v", obj, err)
 		return
 	}
 	c.workqueue.Add(key)
@@ -354,11 +354,11 @@ func (c *Controller) enqueueTApp(obj interface{}) {
 func (c *Controller) Sync(key string) error {
 	startTime := time.Now()
 	defer func() {
-		glog.V(4).Infof("Finished syncing tapp %s(%v)", key, time.Now().Sub(startTime))
+		klog.V(4).Infof("Finished syncing tapp %s(%v)", key, time.Now().Sub(startTime))
 	}()
 
 	if !c.podStoreSynced() {
-		glog.V(2).Infof("Pod store is not synced, skip syncing tapp %s", key)
+		klog.V(2).Infof("Pod store is not synced, skip syncing tapp %s", key)
 		// Sleep to give the pod reflector goroutine a chance to run.
 		time.Sleep(PodStoreSyncedPollPeriod)
 		return fmt.Errorf("waiting for pods controller to sync")
@@ -370,29 +370,29 @@ func (c *Controller) Sync(key string) error {
 	}
 	tapp, err := c.tappLister.TApps(namespace).Get(name)
 	if errors.IsNotFound(err) {
-		glog.Infof("TApp has been deleted %v", key)
+		klog.Infof("TApp has been deleted %v", key)
 		return nil
 	}
 	if err != nil {
-		glog.Errorf("Unable to retrieve tapp %s from store: %v", util.GetTAppFullName(tapp), err)
+		klog.Errorf("Unable to retrieve tapp %s from store: %v", util.GetTAppFullName(tapp), err)
 		return err
 	}
 
 	err = c.preprocessTApp(tapp)
 	if err != nil {
-		glog.Errorf("Failed to preprocess tapp %s: %v", util.GetTAppFullName(tapp), err)
+		klog.Errorf("Failed to preprocess tapp %s: %v", util.GetTAppFullName(tapp), err)
 		return err
 	}
 
 	pods, err := c.getPodsForTApp(tapp)
 	if err != nil {
-		glog.Errorf("Failed to get pods for tapp %s: %v", util.GetTAppFullName(tapp), err)
+		klog.Errorf("Failed to get pods for tapp %s: %v", util.GetTAppFullName(tapp), err)
 		return err
 	}
 
 	if isTAppFinished(tapp) && tapp.Generation == tapp.Status.ObservedGeneration &&
 		tapp.Spec.Replicas == tapp.Status.Replicas && len(pods) == 0 {
-		glog.Errorf("Tapp %s has finished, replica: %d, status: %s", util.GetTAppFullName(tapp),
+		klog.Errorf("Tapp %s has finished, replica: %d, status: %s", util.GetTAppFullName(tapp),
 			tapp.Spec.Replicas, tapp.Status.AppStatus)
 		return nil
 	}
@@ -400,7 +400,7 @@ func (c *Controller) Sync(key string) error {
 	c.syncTApp(tapp, pods)
 
 	if err := c.updateTAppStatus(tapp, pods); err != nil {
-		glog.Errorf("Failed to update tapp %s's status: %v", util.GetTAppFullName(tapp), err)
+		klog.Errorf("Failed to update tapp %s's status: %v", util.GetTAppFullName(tapp), err)
 		return err
 	}
 
@@ -412,31 +412,31 @@ func (c *Controller) preprocessTApp(tapp *tappv1.TApp) error {
 	newTapp := tapp.DeepCopy()
 
 	if err := c.updateTemplateHash(newTapp); err != nil {
-		glog.Errorf("Failed to update template hash for tapp: %s", util.GetTAppFullName(tapp))
+		klog.Errorf("Failed to update template hash for tapp: %s", util.GetTAppFullName(tapp))
 	}
 
 	err := c.setLabelSelector(newTapp)
 	if err != nil {
-		glog.Errorf("Failed to setLabelSelector for tapp %s: %v", util.GetTAppFullName(tapp), err)
+		klog.Errorf("Failed to setLabelSelector for tapp %s: %v", util.GetTAppFullName(tapp), err)
 		return err
 	}
 
 	// Set scale label selector
 	err = c.setScaleLabelSelector(newTapp)
 	if err != nil {
-		glog.Errorf("Failed to setScaleLabelSelector for tapp %s: %v", util.GetTAppFullName(tapp), err)
+		klog.Errorf("Failed to setScaleLabelSelector for tapp %s: %v", util.GetTAppFullName(tapp), err)
 		return err
 	}
 
 	// Update tapp if needed
 	if !reflect.DeepEqual(newTapp.Spec, tapp.Spec) {
-		glog.V(4).Infof("Update tapp %s's spec: %+v => %+v", util.GetTAppFullName(tapp), tapp.Spec, newTapp.Spec)
+		klog.V(4).Infof("Update tapp %s's spec: %+v => %+v", util.GetTAppFullName(tapp), tapp.Spec, newTapp.Spec)
 		if newTapp, err = c.tappclient.TappcontrollerV1().TApps(newTapp.Namespace).Update(newTapp); err != nil {
 			return err
 		}
 	}
 	if !reflect.DeepEqual(newTapp.Status, tapp.Status) {
-		glog.V(4).Infof("Update tapp %s's status: %+v => %+v", util.GetTAppFullName(tapp), tapp.Spec, newTapp.Spec)
+		klog.V(4).Infof("Update tapp %s's status: %+v => %+v", util.GetTAppFullName(tapp), tapp.Spec, newTapp.Spec)
 		if newTapp, err = c.tappclient.TappcontrollerV1().TApps(newTapp.Namespace).UpdateStatus(newTapp); err != nil {
 			return err
 		}
@@ -469,7 +469,7 @@ func (c *Controller) setLabelSelector(tapp *tappv1.TApp) error {
 	}
 
 	if len(tapp.Spec.Template.Labels) == 0 {
-		glog.Errorf("Found a tapp %s with no labels: %+v", tapp.Name, tapp.Spec)
+		klog.Errorf("Found a tapp %s with no labels: %+v", tapp.Name, tapp.Spec)
 		return fmt.Errorf("no lables found in tapp: %s", util.GetTAppFullName(tapp))
 	}
 
@@ -496,7 +496,7 @@ func (c *Controller) setLabelSelector(tapp *tappv1.TApp) error {
 func (c *Controller) setScaleLabelSelector(tapp *tappv1.TApp) error {
 	selector, err := metav1.LabelSelectorAsSelector(tapp.Spec.Selector)
 	if err != nil {
-		glog.Errorf("Failed to get label selector for TApp %s: %v", util.GetTAppFullName(tapp), err)
+		klog.Errorf("Failed to get label selector for TApp %s: %v", util.GetTAppFullName(tapp), err)
 		return err
 	}
 
@@ -580,7 +580,7 @@ func makePodMap(pods []*corev1.Pod) map[string]*corev1.Pod {
 	for _, pod := range pods {
 		index, err := getPodIndex(pod)
 		if err != nil {
-			glog.Errorf("Failed to get pod index from pod %s: %v", getPodFullName(pod), err)
+			klog.Errorf("Failed to get pod index from pod %s: %v", getPodFullName(pod), err)
 			continue
 		}
 		podMap[index] = pod
@@ -623,32 +623,32 @@ func (c *Controller) syncRunningInstances(tapp *tappv1.TApp, running sets.String
 			if instance, err := newInstance(tapp, id); err == nil {
 				add = append(add, instance)
 			} else {
-				glog.Errorf("Failed to newInstance %s-%s: %v", util.GetTAppFullName(tapp), id, err)
+				klog.Errorf("Failed to newInstance %s-%s: %v", util.GetTAppFullName(tapp), id, err)
 			}
 		} else {
 			if c.needForceDelete(tapp, pod) {
 				// 0, pod is Deleting, we need force delete it for some cases
-				glog.V(4).Infof("Force delete pod %s", getPodFullName(pod))
+				klog.V(4).Infof("Force delete pod %s", getPodFullName(pod))
 				if instance, err := newInstanceWithPod(tapp, pod); err == nil {
 					forceDel = append(forceDel, instance)
 				} else {
-					glog.Errorf("Failed to newInstance %s: %+v", getPodFullName(pod), err)
+					klog.Errorf("Failed to newInstance %s: %+v", getPodFullName(pod), err)
 				}
 			} else if isPodDying(pod) {
 				// 1, pod is Deleting, wait kubelet/nodeController to completely delete pod
 			} else if isPodCompleted(pod) {
 				// 2, pod is completed, migrate pod or just leave it be
 				if migrate, err := shouldPodMigrate(tapp, pod, id); err != nil {
-					glog.Errorf("Failed to determine whether needs migrate pod %s: %v", getPodFullName(pod), err)
+					klog.Errorf("Failed to determine whether needs migrate pod %s: %v", getPodFullName(pod), err)
 				} else if migrate {
-					glog.V(4).Infof("Migrating pod %s", getPodFullName(pod))
+					klog.V(4).Infof("Migrating pod %s", getPodFullName(pod))
 					if instance, err := newInstanceWithPod(tapp, pod); err == nil {
 						del = append(del, instance)
 					} else {
-						glog.Errorf("Failed to newInstance %s: %v", getPodFullName(pod), err)
+						klog.Errorf("Failed to newInstance %s: %v", getPodFullName(pod), err)
 					}
 				} else {
-					glog.V(6).Infof("Skip migrating pod %s, status:%s", getPodFullName(pod), pod.Status.Phase)
+					klog.V(6).Infof("Skip migrating pod %s, status:%s", getPodFullName(pod), pod.Status.Phase)
 				}
 			} else if c.isTemplateHashChanged(tapp, id, pod) {
 				// 3, pod is pending/running/unknown, update pod if template hash changed.
@@ -661,15 +661,15 @@ func (c *Controller) syncRunningInstances(tapp *tappv1.TApp, running sets.String
 					if instance, err := newInstance(tapp, id); err == nil {
 						update = append(update, instance)
 					} else {
-						glog.Errorf("Failed to newInstance %s-%s: %v", util.GetTAppFullName(tapp), id, err)
+						klog.Errorf("Failed to newInstance %s-%s: %v", util.GetTAppFullName(tapp), id, err)
 					}
 				} else {
 					// Recreate pod
-					glog.V(4).Infof("Recreating instance %s", getPodFullName(pod))
+					klog.V(4).Infof("Recreating instance %s", getPodFullName(pod))
 					if instance, err := newInstanceWithPod(tapp, pod); err == nil {
 						del = append(del, instance)
 					} else {
-						glog.Errorf("Failed to newInstance %s: %+v", getPodFullName(pod), err)
+						klog.Errorf("Failed to newInstance %s: %+v", getPodFullName(pod), err)
 					}
 				}
 			}
@@ -683,11 +683,11 @@ func (c *Controller) syncCompletedInstances(tapp *tappv1.TApp, completed sets.St
 	for _, id := range completed.List() {
 		if pod, ok := podMap[id]; ok {
 			if c.needForceDelete(tapp, pod) {
-				glog.V(4).Infof("Failed to force delete pod %s", getPodFullName(pod))
+				klog.V(4).Infof("Failed to force delete pod %s", getPodFullName(pod))
 				if instance, err := newInstanceWithPod(tapp, pod); err == nil {
 					forceDel = append(forceDel, instance)
 				} else {
-					glog.Errorf("Failed to newInstance %s: %+v", getPodFullName(pod), err)
+					klog.Errorf("Failed to newInstance %s: %+v", getPodFullName(pod), err)
 				}
 			} else if isPodDying(pod) {
 				// pod is deleting, wait for kubelet to completely delete
@@ -709,7 +709,7 @@ func (c *Controller) isTemplateHashChanged(tapp *tappv1.TApp, podId string, pod 
 
 	template, err := getPodTemplate(&tapp.Spec, podId)
 	if err != nil {
-		glog.Errorf("Failed to get pod template for %s from tapp %s", getPodFullName(pod),
+		klog.Errorf("Failed to get pod template for %s from tapp %s", getPodFullName(pod),
 			util.GetTAppFullName(tapp))
 		return true
 	}
@@ -721,7 +721,7 @@ func (c *Controller) isUniqHashChanged(tapp *tappv1.TApp, podId string, pod *cor
 	hash := c.tappHash.GetUniqHash(pod.Labels)
 	template, err := getPodTemplate(&tapp.Spec, podId)
 	if err != nil {
-		glog.Errorf("Failed to get pod template for %s from tapp %s", getPodFullName(pod),
+		klog.Errorf("Failed to get pod template for %s from tapp %s", getPodFullName(pod),
 			util.GetTAppFullName(tapp))
 		return true
 	}
@@ -734,7 +734,7 @@ func getInstanceStatus(tapp *tappv1.TApp, pods []*corev1.Pod) map[string]tappv1.
 	for _, pod := range pods {
 		id, err := getPodIndex(pod)
 		if err != nil {
-			glog.Errorf("Failed to get pod %s's index: %v", getPodFullName(pod), err)
+			klog.Errorf("Failed to get pod %s's index: %v", getPodFullName(pod), err)
 			continue
 		}
 
@@ -770,7 +770,7 @@ func getInstanceStatus(tapp *tappv1.TApp, pods []*corev1.Pod) map[string]tappv1.
 			}
 			migrate, err := shouldPodMigrate(tapp, pod, id)
 			if err != nil {
-				glog.Errorf("Failed to determine whether need migrate pod %s: %v", getPodFullName(pod), err)
+				klog.Errorf("Failed to determine whether need migrate pod %s: %v", getPodFullName(pod), err)
 				statuses[id] = status
 			}
 			if migrate {
@@ -876,7 +876,7 @@ func getReadyReplicas(statuses map[string]tappv1.InstanceStatus) (replica int32)
 
 func (c *Controller) updateTAppStatus(tapp *tappv1.TApp, pods []*corev1.Pod) error {
 	if !shouldUpdateTAppStatus(tapp, pods) {
-		glog.V(4).Infof("No need to update tapp %s's status", util.GetTAppFullName(tapp))
+		klog.V(4).Infof("No need to update tapp %s's status", util.GetTAppFullName(tapp))
 		return nil
 	}
 
@@ -891,11 +891,11 @@ func (c *Controller) updateTAppStatus(tapp *tappv1.TApp, pods []*corev1.Pod) err
 		app.Status.ReadyReplicas = getReadyReplicas(app.Status.Statuses)
 		app.Status.ObservedGeneration = app.Generation
 		app.Status.AppStatus = genAppStatus(app)
-		glog.V(3).Infof("Updating tapp %s's status: replicas:%+v, status:%+v, pods:%+v", util.GetTAppFullName(app),
+		klog.V(3).Infof("Updating tapp %s's status: replicas:%+v, status:%+v, pods:%+v", util.GetTAppFullName(app),
 			app.Status.Replicas, app.Status.AppStatus, app.Status.Statuses)
 		_, updateErr = client.UpdateStatus(app)
 		if updateErr != nil {
-			glog.Errorf("Failed to update status for %s: %+v", app.Name, updateErr)
+			klog.Errorf("Failed to update status for %s: %+v", app.Name, updateErr)
 		}
 		if updateErr == nil || i >= statusUpdateRetries {
 			return updateErr
@@ -965,7 +965,7 @@ func rollUpdateFilter(tapp *tappv1.TApp, pods []*corev1.Pod, updates, dels []*In
 
 	minRunning := int(tapp.Spec.Replicas) - killNum - int(*tapp.Spec.UpdateStrategy.MaxUnavailable)
 	if realRunning <= minRunning {
-		glog.V(3).Infof("Stop rolling update tapp %s, realRunning:%d <= minRunning:%d, expectUpdates:%v, realUpdates:%v",
+		klog.V(3).Infof("Stop rolling update tapp %s, realRunning:%d <= minRunning:%d, expectUpdates:%v, realUpdates:%v",
 			util.GetTAppFullName(tapp), realRunning, minRunning, extractInstanceId(updates), extractInstanceId(forceUpdates))
 		return forceUpdates
 	}
@@ -976,14 +976,14 @@ func rollUpdateFilter(tapp *tappv1.TApp, pods []*corev1.Pod, updates, dels []*In
 	}
 
 	if len(forceUpdates) != len(updates) {
-		glog.V(2).Infof("Rolling update tapp %s, realRunning:%d, minRunning:%d, expectUpdates:%v, realUpdates:%v",
+		klog.V(2).Infof("Rolling update tapp %s, realRunning:%d, minRunning:%d, expectUpdates:%v, realUpdates:%v",
 			util.GetTAppFullName(tapp), realRunning, minRunning, extractInstanceId(updates), extractInstanceId(forceUpdates))
 	}
 	return forceUpdates
 }
 
 func (c *Controller) syncTApp(tapp *tappv1.TApp, pods []*corev1.Pod) {
-	glog.V(4).Infof("Syncing tapp %s with %d pods", util.GetTAppFullName(tapp), len(pods))
+	klog.V(4).Infof("Syncing tapp %s with %d pods", util.GetTAppFullName(tapp), len(pods))
 	add, del, forceDel, update := c.instanceToSync(tapp, pods)
 
 	if shouldRollUpdate(tapp, update) {
@@ -999,7 +999,7 @@ func getUpdatingPods(pods []*corev1.Pod) map[string]bool {
 	for _, pod := range pods {
 		if isUpdating(pod) {
 			if id, err := getPodIndex(pod); err != nil {
-				glog.Errorf("Failed to get pod %s/%s index: %v", pod.Namespace, pod.Name, err)
+				klog.Errorf("Failed to get pod %s/%s index: %v", pod.Namespace, pod.Name, err)
 			} else {
 				updating[id] = true
 			}
@@ -1020,11 +1020,11 @@ func isUpdating(pod *corev1.Pod) bool {
 	}
 	for _, status := range pod.Status.ContainerStatuses {
 		if expectedImage, found := expectedContainerImage[status.Name]; !found {
-			glog.Warningf("Failed to find expected image for container %s in pod %s/%s",
+			klog.Warningf("Failed to find expected image for container %s in pod %s/%s",
 				status.Name, pod.Namespace, pod.Name)
 		} else if !isSameImage(expectedImage, status.Image) || len(status.ImageID) == 0 {
 			// status.ImageID == "" means pulling image now
-			glog.V(5).Infof("Pod %s/%s is updating", pod.Namespace, pod.Name)
+			klog.V(5).Infof("Pod %s/%s is updating", pod.Namespace, pod.Name)
 			return true
 		}
 	}

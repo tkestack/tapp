@@ -29,7 +29,6 @@ import (
 	"tkestack.io/tapp/pkg/tapp"
 	"tkestack.io/tapp/pkg/version/verflag"
 
-	"github.com/golang/glog"
 	"github.com/spf13/pflag"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,6 +41,7 @@ import (
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	componentbaseconfig "k8s.io/component-base/config"
 	"k8s.io/component-base/logs"
+	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/client/leaderelectionconfig"
 )
 
@@ -87,24 +87,24 @@ func main() {
 
 	cfg, err := clientcmd.BuildConfigFromFlags(masterURL, kubeconfig)
 	if err != nil {
-		glog.Fatalf("Error building kubeconfig: %s", err.Error())
+		klog.Fatalf("Error building kubeconfig: %s", err.Error())
 	}
 	cfg.QPS = kubeAPIQPS
 	cfg.Burst = kubeAPIBurst
 
 	kubeClient, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
-		glog.Fatalf("Error building kubernetes clientset: %s", err.Error())
+		klog.Fatalf("Error building kubernetes clientset: %s", err.Error())
 	}
 
 	tappClient, err := clientset.NewForConfig(cfg)
 	if err != nil {
-		glog.Fatalf("Error building example clientset: %s", err.Error())
+		klog.Fatalf("Error building example clientset: %s", err.Error())
 	}
 
 	extensionsClient, err := apiextensionsclient.NewForConfig(cfg)
 	if err != nil {
-		glog.Fatalf("Error instantiating apiextensions client: %s", err.Error())
+		klog.Fatalf("Error instantiating apiextensions client: %s", err.Error())
 	}
 
 	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, time.Second*30)
@@ -123,7 +123,7 @@ func main() {
 			}, stop)
 			server, err := admission.NewServer(listenAddress, tlsCertFile, tlsKeyFile)
 			if err != nil {
-				glog.Fatalf("Error new admission server: %v", err)
+				klog.Fatalf("Error new admission server: %v", err)
 			}
 			go server.Run(stop)
 		}
@@ -138,7 +138,7 @@ func main() {
 		tapp.SetDeletePodAfterAppFinish(deletePodAfterAppFinish)
 
 		if err = controller.Run(worker, stop); err != nil {
-			glog.Fatalf("Error running controller: %s", err.Error())
+			klog.Fatalf("Error running controller: %s", err.Error())
 		}
 	}
 
@@ -149,7 +149,7 @@ func main() {
 
 	id, err := os.Hostname()
 	if err != nil {
-		glog.Fatalf("Failed to get hostname: %s", err.Error())
+		klog.Fatalf("Failed to get hostname: %s", err.Error())
 	}
 
 	leaderElectionClient := kubernetes.NewForConfigOrDie(restclient.AddUserAgent(cfg, "leader-election"))
@@ -163,7 +163,7 @@ func main() {
 			EventRecorder: controller.GetEventRecorder(),
 		})
 	if err != nil {
-		glog.Fatalf("error creating lock: %v", err)
+		klog.Fatalf("error creating lock: %v", err)
 	}
 
 	leaderelection.RunOrDie(context.TODO(), leaderelection.LeaderElectionConfig{
@@ -174,7 +174,7 @@ func main() {
 		Callbacks: leaderelection.LeaderCallbacks{
 			OnStartedLeading: run,
 			OnStoppedLeading: func() {
-				glog.Fatalf("leaderelection lost")
+				klog.Fatalf("leaderelection lost")
 			},
 		},
 	})
