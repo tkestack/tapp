@@ -4,6 +4,8 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+IMAGE=$1
+
 ROOT=$(cd $(dirname "${BASH_SOURCE}")/.. && pwd -P)
 GIT_VERSION_FILE="${ROOT}/.version-defs"
 BIN="build/docker/tapp-controller"
@@ -18,10 +20,10 @@ else
   api::version::save_version_vars "${GIT_VERSION_FILE}"
 fi
 
-go get github.com/mitchellh/gox
+go get github.com/mitchellh/gox@v1.0.1
 
 cd $ROOT
 CGO_ENABLED=0 gox -osarch="linux/amd64" -ldflags "$(api::version::ldflags)" \
 	-output=$BIN
-docker build build/docker/ -t tkestack/tapp-controller:v1.0.0
+docker build build/docker/ -t $IMAGE
 rm $BIN
