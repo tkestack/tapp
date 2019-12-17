@@ -8,8 +8,6 @@ ROOT=$(cd $(dirname "${BASH_SOURCE}")/.. && pwd -P)
 
 source "${ROOT}/hack/lib/golang.sh"
 
-echo "GOPATH $GOPATH"
-
 TIMEOUT=${TIMEOUT:-5m}
 
 cd $ROOT
