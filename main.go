@@ -83,8 +83,6 @@ const (
 )
 
 func main() {
-	flag.CommandLine.Parse([]string{})
-
 	cfg, err := clientcmd.BuildConfigFromFlags(masterURL, kubeconfig)
 	if err != nil {
 		klog.Fatalf("Error building kubeconfig: %s", err.Error())
@@ -182,7 +180,9 @@ func main() {
 }
 
 func init() {
+	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	addFlags(pflag.CommandLine)
+	pflag.Parse()
 
 	logs.InitLogs()
 	defer logs.FlushLogs()
