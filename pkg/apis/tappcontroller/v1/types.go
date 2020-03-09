@@ -76,6 +76,10 @@ type TAppSpec struct {
 	// Default values is false.
 	ForceDeletePod bool `json:"forceDeletePod,omitempty"`
 
+	// NeverMigrate indicates whether to migrate pods. If it is true, pods will never be migrated to
+	// other nodes, otherwise it depends on other conditions(e.g. pod restart policy).
+	NeverMigrate bool `json:"neverMigrate,omitempty"`
+
 	// volumeClaimTemplates is a list of claims that pods are allowed to reference.
 	// The StatefulSet controller is responsible for mapping network identities to
 	// claims in a way that maintains the identity of a pod. Every claim in
