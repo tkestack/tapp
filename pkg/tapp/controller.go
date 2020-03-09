@@ -552,6 +552,10 @@ func shouldPodMigrate(tapp *tappv1.TApp, pod *corev1.Pod, id string) (bool, erro
 			util.GetTAppFullName(tapp), id, err)
 	}
 
+	if tapp.Spec.NeverMigrate {
+		return false, nil
+	}
+
 	// Containers in pod have not run yet, e.g. kubelet reject the pod.
 	// TODO: It is just a workaround to add `len(pod.Spec.NodeName) != 0` to make old test cases pass.
 	if len(pod.Spec.NodeName) != 0 && len(pod.Status.InitContainerStatuses) == 0 &&

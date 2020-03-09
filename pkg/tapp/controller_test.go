@@ -147,6 +147,13 @@ func TestShouldPodMigrate(t *testing.T) {
 	if err != nil || v != true {
 		t.Errorf("TestShouldPodMigrate failed for pod that no containers have run")
 	}
+
+	// Test case for 'NeverMigrate'
+	tapp.Spec.NeverMigrate = true
+	v, err = shouldPodMigrate(&tapp, &pod, "0")
+	if err != nil || v != false {
+		t.Errorf("TestShouldPodMigrate failed for pod that no containers have run")
+	}
 }
 
 func TestNeedForceDelete(t *testing.T) {
