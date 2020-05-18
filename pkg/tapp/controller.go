@@ -746,12 +746,7 @@ func getInstanceStatus(tapp *tappv1.TApp, pods []*corev1.Pod) map[string]tappv1.
 		// then `isPodDying(pod)` in the following code will be true, and it will be
 		// set to InstanceKilling. At the next sync, pod is deleted, and status is
 		// not finished, tapp controller will create the pod. :(
-		if isInstanceFinished(tapp.Status.Statuses[id]) {
-			statuses[id] = tapp.Status.Statuses[id]
-			continue
-		}
-
-		if isPodDying(pod) {
+		if isPodDying(pod) && !isInstanceFinished(tapp.Status.Statuses[id]) {
 			statuses[id] = tappv1.InstanceKilling
 			continue
 		}
