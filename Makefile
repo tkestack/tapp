@@ -31,10 +31,10 @@ format:
 	hack/format.sh
 
 build-image: verify-gofmt
-	hack/build-image.sh tkestack/tapp-controller:v1.0.0
+	hack/build-image.sh tkestack/tapp-controller:latest
 
 push-image:
-	hack/push-image.sh tkestack/tapp-controller:v1.0.0
+	hack/push-image.sh tkestack/tapp-controller:latest
 
 release: build-image push-image
 
