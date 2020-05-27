@@ -516,18 +516,19 @@ type InstanceTestState string
 
 const (
 	// RUNNING
-	READY    InstanceTestState = "Ready"
-	NOTREADY InstanceTestState = "NotReady"
+	ready    InstanceTestState = "Ready"
+	notReady InstanceTestState = "NotReady"
 
-	UPDATE    InstanceTestState = "Update"
-	ROLLUPATE InstanceTestState = "Rollupdate"
+	update             InstanceTestState = "Update"
+	rollUpdate         InstanceTestState = "Rollupdate"
+	rollupdateNotready InstanceTestState = "RollupdateNotReady"
 
-	DEADING InstanceTestState = "Deading"
+	deading InstanceTestState = "Deading"
 
-	KILLED   InstanceTestState = "Killed"
-	COMPLETE InstanceTestState = "Complete"
+	killed   InstanceTestState = "Killed"
+	complete InstanceTestState = "Complete"
 
-	NULL InstanceTestState = "nil"
+	emptyState InstanceTestState = "nil"
 )
 
 func createTAppWithRollUpdate(replica int) (*tappv1.TApp, string, string, error) {
@@ -575,22 +576,22 @@ func extractPodStatus(pods []*corev1.Pod) []InstanceTestState {
 	states := []InstanceTestState{}
 	for _, pod := range pods {
 		if pod.DeletionTimestamp != nil {
-			states = append(states, DEADING)
+			states = append(states, deading)
 		}
 		switch pod.Status.Phase {
 		case corev1.PodRunning:
 			_, condition := GetPodCondition(&pod.Status, corev1.PodReady)
 			if condition == nil {
-				states = append(states, NULL)
+				states = append(states, emptyState)
 			} else if condition.Status == corev1.ConditionTrue {
-				states = append(states, READY)
+				states = append(states, ready)
 			} else {
-				states = append(states, NOTREADY)
+				states = append(states, notReady)
 			}
 		case corev1.PodFailed:
 			fallthrough
 		case corev1.PodSucceeded:
-			states = append(states, COMPLETE)
+			states = append(states, complete)
 		}
 	}
 
@@ -610,32 +611,37 @@ func createRollUpdateTestValues(instances []InstanceTestState) (*tappv1.TApp, []
 	for i, state := range instances {
 		id := strconv.Itoa(i)
 		switch state {
-		case KILLED:
+		case killed:
 			instance := createTAppPod(tapp, id, corev1.PodRunning, corev1.ConditionTrue)
 			pods = append(pods, instance.pod)
 			dels = append(dels, instance)
 			testutil.KillInstance(tapp, id)
-		case UPDATE:
+		case update:
 			instance := createTAppPod(tapp, id, corev1.PodRunning, corev1.ConditionTrue)
 			pods = append(pods, instance.pod)
 			updates = append(updates, instance)
 			testutil.UpdateInstanceTemplate(tapp, id, forceUpdateId)
-		case ROLLUPATE:
+		case rollUpdate:
 			instance := createTAppPod(tapp, id, corev1.PodRunning, corev1.ConditionTrue)
 			pods = append(pods, instance.pod)
 			updates = append(updates, instance)
 			testutil.UpdateInstanceTemplate(tapp, id, rollUpdateId)
-		case READY:
-			instance := createTAppPod(tapp, id, corev1.PodRunning, corev1.ConditionTrue)
-			pods = append(pods, instance.pod)
-		case NOTREADY:
+		case rollupdateNotready:
 			instance := createTAppPod(tapp, id, corev1.PodRunning, corev1.ConditionFalse)
 			pods = append(pods, instance.pod)
-		case DEADING:
+			updates = append(updates, instance)
+			testutil.UpdateInstanceTemplate(tapp, id, rollUpdateId)
+		case ready:
+			instance := createTAppPod(tapp, id, corev1.PodRunning, corev1.ConditionTrue)
+			pods = append(pods, instance.pod)
+		case notReady:
+			instance := createTAppPod(tapp, id, corev1.PodRunning, corev1.ConditionFalse)
+			pods = append(pods, instance.pod)
+		case deading:
 			instance := createTAppPod(tapp, id, corev1.PodRunning, corev1.ConditionTrue)
 			instance.pod.DeletionTimestamp = &metav1.Time{time.Now()}
 			pods = append(pods, instance.pod)
-		case COMPLETE:
+		case complete:
 			instance := createTAppPod(tapp, id, corev1.PodFailed, corev1.ConditionFalse)
 			pods = append(pods, instance.pod)
 		default:
@@ -649,82 +655,90 @@ func TestRollingUpdate(t *testing.T) {
 	tests := []RollUpdateTestUnit{
 		// no effect to normal
 		{
-			[]InstanceTestState{READY, READY, READY},
+			[]InstanceTestState{ready, ready, ready},
 			[]int{},
 		},
 		{
-			[]InstanceTestState{READY, READY, NOTREADY},
+			[]InstanceTestState{ready, ready, notReady},
 			[]int{},
 		},
 		{
-			[]InstanceTestState{READY, READY, UPDATE},
+			[]InstanceTestState{ready, ready, update},
 			[]int{2},
 		},
 		{
-			[]InstanceTestState{READY, READY, DEADING},
+			[]InstanceTestState{ready, ready, deading},
 			[]int{},
 		},
 		{
-			[]InstanceTestState{READY, READY, KILLED},
+			[]InstanceTestState{ready, ready, killed},
 			[]int{},
 		},
 		{
-			[]InstanceTestState{READY, READY, COMPLETE},
+			[]InstanceTestState{ready, ready, complete},
 			[]int{},
 		},
 		// add a rollupdate
 		{
-			[]InstanceTestState{ROLLUPATE, READY, READY, READY},
+			[]InstanceTestState{rollUpdate, ready, ready, ready},
 			[]int{0},
 		},
 		{
-			[]InstanceTestState{ROLLUPATE, READY, READY, NOTREADY},
+			[]InstanceTestState{rollUpdate, ready, ready, notReady},
 			[]int{},
 		},
 		{
-			[]InstanceTestState{ROLLUPATE, READY, READY, UPDATE},
+			[]InstanceTestState{rollUpdate, ready, ready, update},
 			[]int{3},
 		},
 		{
-			[]InstanceTestState{ROLLUPATE, READY, READY, DEADING},
+			[]InstanceTestState{rollUpdate, ready, ready, deading},
 			[]int{},
 		},
 		{
-			[]InstanceTestState{ROLLUPATE, READY, READY, KILLED},
+			[]InstanceTestState{rollUpdate, ready, ready, killed},
 			[]int{0},
 		},
 		{
-			[]InstanceTestState{ROLLUPATE, READY, READY, COMPLETE},
+			[]InstanceTestState{rollUpdate, ready, ready, complete},
 			[]int{},
+		},
+		{
+			[]InstanceTestState{rollUpdate, rollupdateNotready, ready, complete},
+			[]int{1},
+		},
+		{
+			[]InstanceTestState{rollupdateNotready, rollupdateNotready, ready, ready},
+			[]int{0, 1},
 		},
 		// add 2 rollupdate
 		{
-			[]InstanceTestState{ROLLUPATE, ROLLUPATE, READY, READY, READY},
+			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, ready},
 			[]int{0},
 		},
 		{
-			[]InstanceTestState{ROLLUPATE, ROLLUPATE, READY, READY, NOTREADY},
+			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, notReady},
 			[]int{},
 		},
 		{
-			[]InstanceTestState{ROLLUPATE, ROLLUPATE, READY, READY, UPDATE},
+			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, update},
 			[]int{4},
 		},
 		{
-			[]InstanceTestState{ROLLUPATE, ROLLUPATE, READY, READY, DEADING},
+			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, deading},
 			[]int{},
 		},
 		{
-			[]InstanceTestState{ROLLUPATE, ROLLUPATE, READY, READY, KILLED},
+			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, killed},
 			[]int{0},
 		},
 		{
-			[]InstanceTestState{ROLLUPATE, ROLLUPATE, READY, READY, COMPLETE},
+			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, complete},
 			[]int{},
 		},
-		// more UPDATE
+		// more update
 		{
-			[]InstanceTestState{ROLLUPATE, ROLLUPATE, READY, READY, UPDATE, UPDATE},
+			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, update, update},
 			[]int{4, 5},
 		},
 	}
