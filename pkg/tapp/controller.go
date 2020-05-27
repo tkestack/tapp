@@ -409,13 +409,28 @@ func (c *Controller) Sync(key string) error {
 
 // Mainly check whether we need create/add/delete templates, and do it if needed.
 func (c *Controller) preprocessTApp(tapp *tappv1.TApp) error {
-	newTapp := tapp.DeepCopy()
+	var newTapp *tappv1.TApp
+	var err error
+
+	if tapp.Generation != tapp.Status.ObservedGeneration {
+		klog.V(4).Infof("==> Pre-update tapp %+v", tapp)
+		// TODO: it is a little tricky here, and it might brings unnecessary update.
+		// It will take effect on calculating the tapp hash.
+		// If container resource is 0.5 cpu, it will be updated to 500m after updating tapp because of serialization.
+		newTapp, err = c.tappclient.TappcontrollerV1().TApps(tapp.Namespace).Update(tapp)
+		if err != nil {
+			return err
+		}
+	} else {
+		newTapp = tapp.DeepCopy()
+	}
 
 	if err := c.updateTemplateHash(newTapp); err != nil {
 		klog.Errorf("Failed to update template hash for tapp: %s", util.GetTAppFullName(tapp))
+		return err
 	}
 
-	err := c.setLabelSelector(newTapp)
+	err = c.setLabelSelector(newTapp)
 	if err != nil {
 		klog.Errorf("Failed to setLabelSelector for tapp %s: %v", util.GetTAppFullName(tapp), err)
 		return err
