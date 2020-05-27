@@ -947,6 +947,7 @@ func rollUpdateFilter(tapp *tappv1.TApp, pods []*corev1.Pod, updates, dels []*In
 	}
 
 	realRunning := 0
+	runningPods := make(map[string]bool)
 	killNum := 0
 	// get the pod is running and will be not delete/update in next op
 	for i := 0; i < int(tapp.Spec.Replicas); i++ {
@@ -973,20 +974,22 @@ func rollUpdateFilter(tapp *tappv1.TApp, pods []*corev1.Pod, updates, dels []*In
 		if _, condition := GetPodCondition(&pod.Status, corev1.PodReady); condition != nil {
 			if condition.Status == corev1.ConditionTrue {
 				realRunning++
+				runningPods[id] = true
 			}
 		}
 	}
 
 	minRunning := int(tapp.Spec.Replicas) - killNum - int(*tapp.Spec.UpdateStrategy.MaxUnavailable)
-	if realRunning <= minRunning {
-		klog.V(3).Infof("Stop rolling update tapp %s, realRunning:%d <= minRunning:%d, expectUpdates:%v, realUpdates:%v",
-			util.GetTAppFullName(tapp), realRunning, minRunning, extractInstanceId(updates), extractInstanceId(forceUpdates))
-		return forceUpdates
-	}
 
 	sort.Sort(rollingUpdates)
-	for i := 0; i < realRunning-minRunning && i < len(rollingUpdates); i++ {
-		forceUpdates = append(forceUpdates, rollingUpdates[i])
+	n := realRunning - minRunning
+	for _, u := range rollingUpdates {
+		if !runningPods[u.id] {
+			forceUpdates = append(forceUpdates, u)
+		} else if n > 0 {
+			forceUpdates = append(forceUpdates, u)
+			n--
+		}
 	}
 
 	if len(forceUpdates) != len(updates) {
