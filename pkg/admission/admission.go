@@ -59,7 +59,7 @@ func Register(clientset *kubernetes.Clientset, namespace string, caFile string) 
 		ObjectMeta: metav1.ObjectMeta{
 			Name: validatingWebhookConfiguration,
 		},
-		Webhooks: []admissionregistrationv1beta1.Webhook{
+		Webhooks: []admissionregistrationv1beta1.ValidatingWebhook{
 			{
 				Name: fmt.Sprintf("tapp-controller.%s.svc", namespace),
 				Rules: []admissionregistrationv1beta1.RuleWithOperations{{

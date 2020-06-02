@@ -21,12 +21,12 @@ package v1
 import (
 	"time"
 
-	v1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
-	scheme "tkestack.io/tapp/pkg/client/clientset/versioned/scheme"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
 	rest "k8s.io/client-go/rest"
+	v1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
+	scheme "tkestack.io/tapp/pkg/client/clientset/versioned/scheme"
 )
 
 // TAppsGetter has a method to return a TAppInterface.

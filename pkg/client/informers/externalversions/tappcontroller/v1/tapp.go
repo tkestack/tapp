@@ -21,14 +21,14 @@ package v1
 import (
 	time "time"
 
-	tappcontrollerv1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
-	versioned "tkestack.io/tapp/pkg/client/clientset/versioned"
-	internalinterfaces "tkestack.io/tapp/pkg/client/informers/externalversions/internalinterfaces"
-	v1 "tkestack.io/tapp/pkg/client/listers/tappcontroller/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
 	cache "k8s.io/client-go/tools/cache"
+	tappcontrollerv1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
+	versioned "tkestack.io/tapp/pkg/client/clientset/versioned"
+	internalinterfaces "tkestack.io/tapp/pkg/client/informers/externalversions/internalinterfaces"
+	v1 "tkestack.io/tapp/pkg/client/listers/tappcontroller/v1"
 )
 
 // TAppInformer provides access to a shared informer and lister for

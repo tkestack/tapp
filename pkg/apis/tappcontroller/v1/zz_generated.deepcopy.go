@@ -58,7 +58,7 @@ func (in *TApp) DeepCopyObject() runtime.Object {
 func (in *TAppList) DeepCopyInto(out *TAppList) {
 	*out = *in
 	out.TypeMeta = in.TypeMeta
-	out.ListMeta = in.ListMeta
+	in.ListMeta.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		in, out := &in.Items, &out.Items
 		*out = make([]TApp, len(*in))
