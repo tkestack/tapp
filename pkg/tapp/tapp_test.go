@@ -19,6 +19,7 @@ package tapp
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"testing"
 	"time"
@@ -491,20 +492,25 @@ type RollUpdateTestUnit struct {
 }
 
 func (u *RollUpdateTestUnit) test(t *testing.T) {
-	tapp, pods, updates, dels, err := createRollUpdateTestValues(u.states)
+	tapp, pods, updates, _, err := createRollUpdateTestValues(u.states)
 	if err != nil {
 		t.Errorf("%+v", err)
 	}
 
-	updating := map[string]bool{}
-
-	newUpdates := rollUpdateFilter(tapp, pods, updates, dels, updating)
+	controller, _ := newFakeTAppController()
+	// TODO: add test cases for add, del, update
+	_, _, _, newUpdates := controller.instanceToSync(tapp, pods)
 
 	if len(newUpdates) != len(u.updates) {
 		t.Fatalf("testUnit:%+v, pods:%v, newUpdates:%v, updates:%v, expected:%v",
 			u, extractPodStatus(pods), extractInstanceId(newUpdates), extractInstanceId(updates), u.updates)
 	}
 
+	sort.Slice(newUpdates, func(i, j int) bool {
+		id1, _ := strconv.Atoi(newUpdates[i].id)
+		id2, _ := strconv.Atoi(newUpdates[j].id)
+		return id1 < id2
+	})
 	for i, instance := range newUpdates {
 		if instance.id != strconv.Itoa(u.updates[i]) {
 			t.Fatalf("testUnit:%+v, newUpdates:%v, expected:%v", u, extractInstanceId(newUpdates), u.updates)

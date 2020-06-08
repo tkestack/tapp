@@ -19,7 +19,6 @@ package tapp
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -73,6 +72,7 @@ func newInstanceWithPod(tapp *tappv1.TApp, pod *corev1.Pod) (*Instance, error) {
 	if id, err := getPodIndex(pod); err == nil {
 		return &Instance{pod, id, tapp}, nil
 	} else {
+		klog.Errorf("Failed to new instance with pod %v: %v", getPodFullName(pod), err)
 		return nil, err
 	}
 }
@@ -84,11 +84,13 @@ func getTAppKind() schema.GroupVersionKind {
 func newInstance(tapp *tappv1.TApp, id string) (*Instance, error) {
 	template, err := getPodTemplate(&tapp.Spec, id)
 	if err != nil {
+		klog.Errorf("Failed to newInstance %s-%s: %v", util.GetTAppFullName(tapp), id, err)
 		return nil, err
 	}
 
 	pod, err := util.GetPodFromTemplate(template, tapp, getControllerRef(tapp))
 	if err != nil {
+		klog.Errorf("Failed to newInstance %s-%s: %v", util.GetTAppFullName(tapp), id, err)
 		return nil, err
 	}
 	for _, im := range newIdentityMappers(tapp) {
@@ -469,15 +471,4 @@ type defaultInstanceHealthChecker struct{}
 
 func (d *defaultInstanceHealthChecker) isDying(pod *corev1.Pod) bool {
 	return pod != nil && pod.DeletionTimestamp != nil
-}
-
-type InstanceSortWithId []*Instance
-
-func (o InstanceSortWithId) Len() int      { return len(o) }
-func (o InstanceSortWithId) Swap(i, j int) { o[i], o[j] = o[j], o[i] }
-
-func (o InstanceSortWithId) Less(i, j int) bool {
-	id1, _ := strconv.Atoi(o[i].id)
-	id2, _ := strconv.Atoi(o[j].id)
-	return id1 < id2
 }
