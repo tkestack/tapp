@@ -416,6 +416,34 @@ func (p *ApiServerInstanceClient) Update(real *Instance, expected *Instance) err
 		}
 	}
 	p.event(real.parent, "Update", fmt.Sprintf("Instance: %v", real.pod.Name), err)
+
+	// Update pod Ready condition
+	// Workaround for bug https://github.com/kubernetes/kubernetes/issues/91667
+	// TODO: Remove it after fixing the bug.
+	if err == nil {
+		go func() {
+			for {
+				pod, err := pc.Get(pod.Name, metav1.GetOptions{})
+				if err != nil && apierrors.IsNotFound(err) {
+					break
+				}
+				klog.V(5).Infof("Update pod %v Ready condition to false", getPodFullName(pod))
+				for i, condition := range pod.Status.Conditions {
+					if condition.Type == corev1.PodReady {
+						pod.Status.Conditions[i].Status = corev1.ConditionFalse
+						pod.Status.Conditions[i].Reason = "TAppUpdate"
+						if _, err := pc.UpdateStatus(pod); err == nil {
+							break
+						} else {
+							klog.Errorf("Failed to update pod %v Ready condition to false: %v, try again",
+								getPodFullName(pod), err)
+						}
+					}
+				}
+			}
+		}()
+	}
+
 	return err
 }
 
