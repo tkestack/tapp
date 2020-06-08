@@ -61,6 +61,15 @@ const (
 	NodeUnreachablePodReason = "NodeLost"
 )
 
+type PodAction string
+
+const (
+	createPod   PodAction = "CREATE"
+	updatePod   PodAction = "UPDATE"
+	recreatePod PodAction = "RECREATE"
+	deletePod   PodAction = "DELETE"
+)
+
 var (
 	deletePodAfterAppFinish = false
 )
@@ -413,7 +422,7 @@ func (c *Controller) preprocessTApp(tapp *tappv1.TApp) error {
 	var err error
 
 	if tapp.Generation != tapp.Status.ObservedGeneration {
-		klog.V(4).Infof("==> Pre-update tapp %+v", tapp)
+		klog.V(4).Infof("Pre-update tapp %+v", tapp)
 		// TODO: it is a little tricky here, and it might brings unnecessary update.
 		// It will take effect on calculating the tapp hash.
 		// If container resource is 0.5 cpu, it will be updated to 500m after updating tapp because of serialization.
@@ -609,87 +618,77 @@ func makePodMap(pods []*corev1.Pod) map[string]*corev1.Pod {
 
 func (c *Controller) instanceToSync(tapp *tappv1.TApp, pods []*corev1.Pod) (add, del, forceDel, update []*Instance) {
 	podMap := makePodMap(pods)
-	running, completed := getDesiredInstance(tapp)
 
-	add, del, forceDel, update = c.syncRunningInstances(tapp, running, podMap)
-	a, d, f, u := c.syncCompletedInstances(tapp, completed, podMap)
-	add = append(add, a...)
-	del = append(del, d...)
-	forceDel = append(forceDel, f...)
-	update = append(update, u...)
+	desiredRunningPods, desiredCompletedPods := getDesiredInstance(tapp)
+	podActions := c.getNextActionsForPods(tapp, desiredRunningPods, desiredCompletedPods, podMap)
+	add, del, forceDel, update = c.transformPodActions(tapp, podActions, podMap, desiredRunningPods)
 
-	// Delete pods that exceed replica
-	for id, pod := range podMap {
-		if idInt, err := strconv.Atoi(id); err == nil {
-			if idInt >= int(tapp.Spec.Replicas) {
-				if isPodDying(pod) {
-					continue
-				}
-				if instance, err := newInstanceWithPod(tapp, pod); err == nil {
-					del = append(del, instance)
-				}
+	return
+}
+
+// getAvailablePods returns available ready pod ids from desiredRunningPods. Those pods that are not
+// in desiredRunningPods will be deleted.
+func getAvailablePods(podMap map[string]*corev1.Pod, desiredRunningPods sets.String) (availablePods sets.String) {
+	availablePods = make(sets.String)
+	for _, id := range desiredRunningPods.List() {
+		pod, exist := podMap[id]
+		if !exist {
+			continue
+		}
+		if isPodInActive(pod) || isUpdating(pod) {
+			continue
+		}
+
+		if _, condition := GetPodCondition(&pod.Status, corev1.PodReady); condition != nil {
+			if condition.Status == corev1.ConditionTrue {
+				availablePods.Insert(id)
 			}
 		}
 	}
 	return
 }
 
-func (c *Controller) syncRunningInstances(tapp *tappv1.TApp, running sets.String,
-	podMap map[string]*corev1.Pod) (add, del, forceDel, update []*Instance) {
-	for _, id := range running.List() {
+func (c *Controller) getNextActionsForPods(tapp *tappv1.TApp, desiredRunningPods sets.String,
+	desiredCompletedPods sets.String, podMap map[string]*corev1.Pod) (podActions map[string]PodAction) {
+	a1 := c.syncRunningPods(tapp, desiredRunningPods, podMap)
+	a2 := c.syncCompletedPods(tapp, desiredCompletedPods, podMap)
+	a3 := c.syncUnwantedPods(tapp, podMap)
+	return mergePodActions(a1, a2, a3)
+}
+
+func (c *Controller) syncRunningPods(tapp *tappv1.TApp, desiredRunningPods sets.String,
+	podMap map[string]*corev1.Pod) (podActions map[string]PodAction) {
+	podActions = make(map[string]PodAction)
+	for _, id := range desiredRunningPods.List() {
 		if pod, ok := podMap[id]; !ok {
 			// pod does not exist, should create it
-			if instance, err := newInstance(tapp, id); err == nil {
-				add = append(add, instance)
-			} else {
-				klog.Errorf("Failed to newInstance %s-%s: %v", util.GetTAppFullName(tapp), id, err)
-			}
+			podActions[id] = createPod
 		} else {
-			if c.needForceDelete(tapp, pod) {
-				// 0, pod is Deleting, we need force delete it for some cases
-				klog.V(4).Infof("Force delete pod %s", getPodFullName(pod))
-				if instance, err := newInstanceWithPod(tapp, pod); err == nil {
-					forceDel = append(forceDel, instance)
-				} else {
-					klog.Errorf("Failed to newInstance %s: %+v", getPodFullName(pod), err)
-				}
-			} else if isPodDying(pod) {
-				// 1, pod is Deleting, wait kubelet/nodeController to completely delete pod
+			if isPodDying(pod) {
+				// Pod is being deleted, check whether we need delete it forcefully.
+				podActions[id] = deletePod
 			} else if isPodCompleted(pod) {
-				// 2, pod is completed, migrate pod or just leave it be
+				// Pod is completed, migrate pod or just leave it be
 				if migrate, err := shouldPodMigrate(tapp, pod, id); err != nil {
 					klog.Errorf("Failed to determine whether needs migrate pod %s: %v", getPodFullName(pod), err)
 				} else if migrate {
-					klog.V(4).Infof("Migrating pod %s", getPodFullName(pod))
-					if instance, err := newInstanceWithPod(tapp, pod); err == nil {
-						del = append(del, instance)
-					} else {
-						klog.Errorf("Failed to newInstance %s: %v", getPodFullName(pod), err)
-					}
+					klog.V(4).Infof("Will migrate pod %s", getPodFullName(pod))
+					// Delete it, then create it in the next sync.
+					podActions[id] = deletePod
 				} else {
 					klog.V(6).Infof("Skip migrating pod %s, status:%s", getPodFullName(pod), pod.Status.Phase)
 				}
 			} else if c.isTemplateHashChanged(tapp, id, pod) {
-				// 3, pod is pending/running/unknown, update pod if template hash changed.
-				// Pod is pending/running/unkonw, check whether template hash changes.
 				// If template hash changes, it means some thing in pod spec got updated.
 				// If image is updated, we only need restart corresponding container, otherwise
 				// we need recreate the pod because k8s does not support restarting it.
 				if !c.isUniqHashChanged(tapp, id, pod) {
-					// Update pod
-					if instance, err := newInstance(tapp, id); err == nil {
-						update = append(update, instance)
-					} else {
-						klog.Errorf("Failed to newInstance %s-%s: %v", util.GetTAppFullName(tapp), id, err)
-					}
+					// Update pod directly
+					podActions[id] = updatePod
 				} else {
-					// Recreate pod
-					klog.V(4).Infof("Recreating instance %s", getPodFullName(pod))
-					if instance, err := newInstanceWithPod(tapp, pod); err == nil {
-						del = append(del, instance)
-					} else {
-						klog.Errorf("Failed to newInstance %s: %+v", getPodFullName(pod), err)
-					}
+					// Recreate pod: delete it firstly, then create it.
+					klog.V(4).Infof("Will recreate pod %s", getPodFullName(pod))
+					podActions[id] = recreatePod
 				}
 			}
 		}
@@ -697,29 +696,143 @@ func (c *Controller) syncRunningInstances(tapp *tappv1.TApp, running sets.String
 	return
 }
 
-func (c *Controller) syncCompletedInstances(tapp *tappv1.TApp, completed sets.String,
-	podMap map[string]*corev1.Pod) (add, del, forceDel, update []*Instance) {
-	for _, id := range completed.List() {
-		if pod, ok := podMap[id]; ok {
-			if c.needForceDelete(tapp, pod) {
-				klog.V(4).Infof("Failed to force delete pod %s", getPodFullName(pod))
-				if instance, err := newInstanceWithPod(tapp, pod); err == nil {
-					forceDel = append(forceDel, instance)
-				} else {
-					klog.Errorf("Failed to newInstance %s: %+v", getPodFullName(pod), err)
-				}
-			} else if isPodDying(pod) {
-				// pod is deleting, wait for kubelet to completely delete
-			} else if instance, err := newInstanceWithPod(tapp, pod); err == nil {
-				// delete running or completed pod
-				del = append(del, instance)
+func (c *Controller) syncCompletedPods(tapp *tappv1.TApp, desiredCompletedPods sets.String,
+	podMap map[string]*corev1.Pod) (podActions map[string]PodAction) {
+	podActions = make(map[string]PodAction)
+	// Sync desired completed pods
+	for _, id := range desiredCompletedPods.List() {
+		if _, ok := podMap[id]; ok {
+			podActions[id] = deletePod
+		}
+	}
+	return
+}
+
+func (c *Controller) syncUnwantedPods(tapp *tappv1.TApp,
+	podMap map[string]*corev1.Pod) (podActions map[string]PodAction) {
+	podActions = make(map[string]PodAction)
+	// Delete pods that exceed replica
+	for id := range podMap {
+		if idInt, err := strconv.Atoi(id); err == nil {
+			if idInt >= int(tapp.Spec.Replicas) {
+				podActions[id] = deletePod
 			}
 		}
 	}
 	return
+}
+
+func mergePodActions(actions ...map[string]PodAction) map[string]PodAction {
+	result := make(map[string]PodAction)
+	for _, a := range actions {
+		for k, v := range a {
+			result[k] = v
+		}
+	}
+
+	return result
+}
+
+func (c *Controller) transformPodActions(tapp *tappv1.TApp, podActions map[string]PodAction, podMap map[string]*corev1.Pod,
+	desiredRunningPods sets.String) (add, del, forceDel, update []*Instance) {
+	var rollingUpdateIds []string
+	availablePods := getAvailablePods(podMap, desiredRunningPods)
+	// Delete pods
+	for p, a := range podActions {
+		pod := podMap[p]
+		switch a {
+		case deletePod:
+			ins, err := newInstanceWithPod(tapp, pod)
+			if err != nil {
+				continue
+			}
+			if c.needForceDelete(tapp, podMap[p]) {
+				forceDel = append(forceDel, ins)
+			} else if !isPodDying(pod) {
+				del = append(del, ins)
+			}
+			availablePods.Delete(p)
+			break
+		case createPod:
+			if instance, err := newInstance(tapp, p); err == nil {
+				add = append(add, instance)
+			}
+			break
+		case updatePod:
+			if !isInRollingUpdate(tapp, p) {
+				if instance, err := newInstance(tapp, p); err == nil {
+					update = append(update, instance)
+					availablePods.Delete(p)
+				}
+			} else {
+				rollingUpdateIds = append(rollingUpdateIds, p)
+			}
+			break
+		case recreatePod:
+			if !isInRollingUpdate(tapp, p) {
+				if instance, err := newInstanceWithPod(tapp, pod); err == nil {
+					del = append(del, instance)
+					availablePods.Delete(p)
+				}
+			} else {
+				rollingUpdateIds = append(rollingUpdateIds, p)
+			}
+			break
+		default:
+			klog.Errorf("Unknown pod action %v for pod %v", a, getPodFullName(pod))
+		}
+	}
+
+	minAvailablePods := 0
+	if tapp.Spec.UpdateStrategy.MaxUnavailable != nil {
+		minAvailablePods = desiredRunningPods.Len() - int(*tapp.Spec.UpdateStrategy.MaxUnavailable)
+	}
+	// First sort ids.
+	sort.Slice(rollingUpdateIds, func(i, j int) bool {
+		id1, _ := strconv.Atoi(rollingUpdateIds[i])
+		id2, _ := strconv.Atoi(rollingUpdateIds[j])
+		return id1 < id2
+	})
+	// Rolling update
+	for _, p := range rollingUpdateIds {
+		pod := podMap[p]
+		action := podActions[p]
+		if availablePods.Has(p) && len(availablePods) <= minAvailablePods {
+			klog.V(3).Infof("Skip %v pod %v because available pods are not enough: %v(current) vs %v(min)",
+				action, getPodFullName(pod), len(availablePods), minAvailablePods)
+			continue
+		}
+		switch action {
+		case updatePod:
+			if instance, err := newInstance(tapp, p); err == nil {
+				update = append(update, instance)
+				availablePods.Delete(p)
+			}
+			break
+		case recreatePod:
+			if instance, err := newInstanceWithPod(tapp, pod); err == nil {
+				del = append(del, instance)
+				availablePods.Delete(p)
+			}
+			break
+		default:
+			klog.Errorf("Unknown pod action %v for pod %v", action, getPodFullName(pod))
+		}
+	}
+
+	return
+}
+
+func isInRollingUpdate(tapp *tappv1.TApp, podId string) bool {
+	rollingTemplateName := getRollingTemplateKey(tapp)
+	templateName := getPodTemplateName(tapp.Spec.Templates, podId)
+	return templateName == rollingTemplateName
 }
 
 func (c *Controller) needForceDelete(tapp *tappv1.TApp, pod *corev1.Pod) bool {
+	if pod == nil {
+		return false
+	}
 	return isPodDying(pod) && pod.Status.Reason == NodeUnreachablePodReason && tapp.Spec.ForceDeletePod
 }
 
@@ -920,109 +1033,10 @@ func (c *Controller) updateTAppStatus(tapp *tappv1.TApp, pods []*corev1.Pod) err
 	}
 }
 
-func rollUpdateFilter(tapp *tappv1.TApp, pods []*corev1.Pod, updates, dels []*Instance,
-	updating map[string]bool) []*Instance {
-	if tapp.Spec.UpdateStrategy.MaxUnavailable == nil {
-		return updates
-	}
-
-	podMap := makePodMap(pods)
-	delMap := map[string]bool{}
-	for _, instance := range dels {
-		delMap[instance.id] = true
-	}
-
-	updateMap := map[string]string{}
-	rollingTemplateName := getRollingTemplateKey(tapp)
-	rollingUpdates := InstanceSortWithId{}
-	forceUpdates := []*Instance{}
-	for _, instance := range updates {
-		templateName := getPodTemplateName(tapp.Spec.Templates, instance.id)
-		updateMap[instance.id] = templateName
-		if templateName == rollingTemplateName {
-			rollingUpdates = append(rollingUpdates, instance)
-		} else {
-			forceUpdates = append(forceUpdates, instance)
-		}
-	}
-
-	realRunning := 0
-	runningPods := make(map[string]bool)
-	killNum := 0
-	// get the pod is running and will be not delete/update in next op
-	for i := 0; i < int(tapp.Spec.Replicas); i++ {
-		id := strconv.Itoa(i)
-		if delMap[id] || tapp.Spec.Statuses[id] == tappv1.InstanceKilled {
-			killNum++
-			continue
-		}
-
-		if templateId, ok := updateMap[id]; ok {
-			if templateId != rollingTemplateName {
-				continue
-			}
-		}
-
-		pod, ok := podMap[id]
-		if !ok {
-			continue
-		}
-		if isPodInActive(pod) || updating[id] {
-			continue
-		}
-
-		if _, condition := GetPodCondition(&pod.Status, corev1.PodReady); condition != nil {
-			if condition.Status == corev1.ConditionTrue {
-				realRunning++
-				runningPods[id] = true
-			}
-		}
-	}
-
-	minRunning := int(tapp.Spec.Replicas) - killNum - int(*tapp.Spec.UpdateStrategy.MaxUnavailable)
-
-	sort.Sort(rollingUpdates)
-	n := realRunning - minRunning
-	for _, u := range rollingUpdates {
-		if !runningPods[u.id] {
-			forceUpdates = append(forceUpdates, u)
-		} else if n > 0 {
-			forceUpdates = append(forceUpdates, u)
-			n--
-		}
-	}
-
-	if len(forceUpdates) != len(updates) {
-		klog.V(2).Infof("Rolling update tapp %s, realRunning:%d, minRunning:%d, expectUpdates:%v, realUpdates:%v",
-			util.GetTAppFullName(tapp), realRunning, minRunning, extractInstanceId(updates), extractInstanceId(forceUpdates))
-	}
-	return forceUpdates
-}
-
 func (c *Controller) syncTApp(tapp *tappv1.TApp, pods []*corev1.Pod) {
 	klog.V(4).Infof("Syncing tapp %s with %d pods", util.GetTAppFullName(tapp), len(pods))
 	add, del, forceDel, update := c.instanceToSync(tapp, pods)
-
-	if shouldRollUpdate(tapp, update) {
-		updating := getUpdatingPods(pods)
-		update = rollUpdateFilter(tapp, pods, update, del, updating)
-	}
 	c.syncer.SyncInstances(add, del, forceDel, update)
-}
-
-// getUpdatingPods returns a map whose key is pod id(e.g. "0", "1"), the map records updating pods
-func getUpdatingPods(pods []*corev1.Pod) map[string]bool {
-	updating := make(map[string]bool)
-	for _, pod := range pods {
-		if isUpdating(pod) {
-			if id, err := getPodIndex(pod); err != nil {
-				klog.Errorf("Failed to get pod %s/%s index: %v", pod.Namespace, pod.Name, err)
-			} else {
-				updating[id] = true
-			}
-		}
-	}
-	return updating
 }
 
 // isUpdating returns true if kubelet is updating image for pod, otherwise returns false

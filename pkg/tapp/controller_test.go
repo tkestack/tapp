@@ -347,7 +347,7 @@ func TestDoKubectlApply(t *testing.T) {
 }
 */
 
-func TestGetUpdatingPods(t *testing.T) {
+func TestIsUpdatingPods(t *testing.T) {
 	pod0 := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{tappv1.TAppInstanceKey: "0"},
@@ -477,4 +477,17 @@ func TestGetUpdatingPods(t *testing.T) {
 	if !reflect.DeepEqual(expectedUpdating, updating) {
 		t.Errorf("Failed to getUpdatingPods, expected: %+v, got: %+v", expectedUpdating, updating)
 	}
+}
+
+// getUpdatingPods returns a map whose key is pod id(e.g. "0", "1"), the map records updating pods
+func getUpdatingPods(pods []*corev1.Pod) map[string]bool {
+	updating := make(map[string]bool)
+	for _, pod := range pods {
+		if isUpdating(pod) {
+			if id, err := getPodIndex(pod); err == nil {
+				updating[id] = true
+			}
+		}
+	}
+	return updating
 }
