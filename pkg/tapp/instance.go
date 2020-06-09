@@ -410,7 +410,7 @@ func (p *ApiServerInstanceClient) Update(real *Instance, expected *Instance) err
 		_, err = pc.Update(rp)
 		if err == nil {
 			p.event(real.parent, "Update", fmt.Sprintf("Instance: %v", real.pod.Name), nil)
-			return nil
+			break
 		}
 		klog.Errorf("Failed to update pod %s, will retry: %v", getPodFullName(rp), err)
 		if rp, err = pc.Get(pod.Name, metav1.GetOptions{}); err != nil {
@@ -429,16 +429,19 @@ func (p *ApiServerInstanceClient) Update(real *Instance, expected *Instance) err
 				if err != nil && apierrors.IsNotFound(err) {
 					break
 				}
-				klog.V(5).Infof("Update pod %v Ready condition to false", getPodFullName(pod))
+				klog.V(4).Infof("Update pod %v Ready condition to false", getPodFullName(pod))
 				for i, condition := range pod.Status.Conditions {
 					if condition.Type == corev1.PodReady {
 						pod.Status.Conditions[i].Status = corev1.ConditionFalse
 						pod.Status.Conditions[i].Reason = "TAppUpdate"
+						pod.Status.Conditions[i].LastTransitionTime = metav1.Now()
 						if _, err := pc.UpdateStatus(pod); err == nil {
-							break
+							klog.V(4).Infof("Successfully update pod %v Ready condition to false", getPodFullName(pod))
+							return
 						} else {
 							klog.Errorf("Failed to update pod %v Ready condition to false: %v, try again",
 								getPodFullName(pod), err)
+							break
 						}
 					}
 				}
