@@ -27,6 +27,13 @@ import (
 	"k8s.io/klog"
 )
 
+
+type patchOperation struct {
+	Op    string      `json:"op"`
+	Path  string      `json:"path"`
+	Value interface{} `json:"value,omitempty"`
+}
+
 // ToAdmissionResponse is a helper function to create an AdmissionResponse
 // with an embedded error
 func ToAdmissionResponse(err error) *v1beta1.AdmissionResponse {

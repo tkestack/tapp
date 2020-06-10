@@ -119,6 +119,9 @@ func main() {
 			wait.PollImmediateUntil(time.Second*5, func() (bool, error) {
 				return admission.Register(kubeClient, namespace, tlsCAfile)
 			}, stop)
+			wait.PollImmediateUntil(time.Second*5, func() (bool, error) {
+				return admission.RegisterMutating(kubeClient, namespace, tlsCAfile)
+			}, stop)
 			server, err := admission.NewServer(listenAddress, tlsCertFile, tlsKeyFile)
 			if err != nil {
 				klog.Fatalf("Error new admission server: %v", err)

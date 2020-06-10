@@ -36,9 +36,11 @@ import (
 
 const (
 	validatingWebhookConfiguration = "tapp-admission"
+	mutatingWebhookConfiguration = "tapp-admission"
 )
 
 var validatePath = "/validate/tapp"
+var mutatePath = "/mutate/tapp"
 var failPolicy admissionregistrationv1beta1.FailurePolicyType = "Fail"
 
 // Register registers the validatingWebhookConfiguration to kube-apiserver
@@ -104,6 +106,69 @@ func Register(clientset *kubernetes.Clientset, namespace string, caFile string) 
 	return true, nil
 }
 
+// Register registers the mutatingWebhookConfiguration to kube-apiserver
+// Note: always return err as nil, it will be used by wait.PollUntil().
+func RegisterMutating(clientset *kubernetes.Clientset, namespace string, caFile string) (bool, error) {
+	klog.Infof("Starting to register mutatingWebhookConfiguration")
+	defer func() {
+		klog.Infof("Finished registering mutatingWebhookConfiguration")
+	}()
+
+	caCert, err := ioutil.ReadFile(caFile)
+	if err != nil {
+		klog.Errorf("Failed to read certificate authority from %s: %v", caFile, err)
+		return false, nil
+	}
+
+	webhookConfig := &admissionregistrationv1beta1.MutatingWebhookConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: mutatingWebhookConfiguration,
+		},
+		Webhooks: []admissionregistrationv1beta1.Webhook{
+			{
+				Name: fmt.Sprintf("tapp-controller.%s.svc", namespace),
+				Rules: []admissionregistrationv1beta1.RuleWithOperations{{
+					Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create,
+						admissionregistrationv1beta1.Update},
+					Rule: admissionregistrationv1beta1.Rule{
+						APIGroups:   []string{tappcontroller.GroupName},
+						APIVersions: []string{"v1"},
+						Resources:   []string{"tapps"},
+					},
+				}},
+				FailurePolicy: &failPolicy,
+				ClientConfig: admissionregistrationv1beta1.WebhookClientConfig{
+					Service: &admissionregistrationv1beta1.ServiceReference{
+						Namespace: namespace,
+						Name:      "tapp-controller",
+						Path:      &mutatePath,
+					},
+					CABundle: caCert,
+				},
+			},
+		},
+	}
+
+	client := clientset.AdmissionregistrationV1beta1().MutatingWebhookConfigurations()
+	if present, err := client.Get(mutatingWebhookConfiguration, metav1.GetOptions{}); err == nil {
+		if !reflect.DeepEqual(present.Webhooks, webhookConfig.Webhooks) {
+			klog.V(1).Infof("Update mutatingWebhookConfiguration from %+v to %+v", present, webhookConfig)
+			webhookConfig.ResourceVersion = present.ResourceVersion
+			if _, err := client.Update(webhookConfig); err != nil {
+				klog.Errorf("Failed to update mutatingWebhookConfiguration: %v", err)
+				return false, nil
+			}
+		}
+	} else {
+		if _, err := client.Create(webhookConfig); err != nil {
+			klog.Errorf("Failed to create mutatingWebhookConfiguration: %v", err)
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
 // Server will start a https server for admitting.
 type Server struct {
 	listenAddress string
@@ -128,6 +193,9 @@ func (ws *Server) Run(stopCh <-chan struct{}) {
 	mux.HandleFunc(validatePath, func(writer http.ResponseWriter, request *http.Request) {
 		Serve(writer, request, admitTApp)
 	})
+	mux.HandleFunc(mutatePath, func(writer http.ResponseWriter, request *http.Request) {
+    	Serve(writer, request, simpleTemplates)
+    })
 
 	server := &http.Server{
 		Addr:    ws.listenAddress,
@@ -150,4 +218,43 @@ func admitTApp(ar *admissionv1beta1.AdmissionReview) *admissionv1beta1.Admission
 	}
 
 	return reviewResponse
+}
+
+
+//remove unused template in TemplatePool
+func simpleTemplates(ar *admissionv1beta1.AdmissionReview) *admissionv1beta1.AdmissionResponse {
+	klog.V(4).Info("simple Templates")
+
+	var tapp tappv1.TApp
+	raw := ar.Request.Object.Raw
+	if err := json.Unmarshal(raw, &tapp); err != nil {
+		klog.Errorf("Failed to unmarshal tapp from %s: %v", raw, err)
+		return ToAdmissionResponse(err)
+	}
+
+	var patch []patchOperation
+
+	for _ , template_used := range tapp.Spec.Templates {
+	    delete(tapp.Spec.TemplatePool,template_used)
+	}
+	for template_unused , _ := range  tapp.Spec.TemplatePool{
+        patch = append(patch, patchOperation{
+				Op:   "remove",
+				Path: "/spec/templatePool/" + template_unused,
+			})
+	}
+	patchBytes, err := json.Marshal(patch)
+	if err != nil {
+	    klog.Errorf("Failed to remove unused template: %v", err)
+        return ToAdmissionResponse(err)
+	}
+
+    return &admissionv1beta1.AdmissionResponse{
+    	Allowed: true,
+    	Patch:   patchBytes,
+    	PatchType: func() *admissionv1beta1.PatchType {
+    		pt := admissionv1beta1.PatchTypeJSONPatch
+    		return &pt
+    	}(),
+    }
 }
