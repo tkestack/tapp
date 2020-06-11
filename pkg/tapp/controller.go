@@ -425,6 +425,12 @@ func (c *Controller) preprocessTApp(tapp *tappv1.TApp) error {
 		newTapp = tapp.DeepCopy()
 	}
 
+	err = c.removeUnusedTemplate(newTapp)
+	if err != nil {
+		klog.Errorf("Failed to remove unused template for tapp %s: %v", util.GetTAppFullName(tapp), err)
+		return err
+	}
+
 	if err := c.updateTemplateHash(newTapp); err != nil {
 		klog.Errorf("Failed to update template hash for tapp: %s", util.GetTAppFullName(tapp))
 		return err
@@ -458,6 +464,20 @@ func (c *Controller) preprocessTApp(tapp *tappv1.TApp) error {
 	}
 	newTapp.DeepCopyInto(tapp)
 
+	return nil
+}
+
+func (c *Controller) removeUnusedTemplate(tapp *tappv1.TApp) error {
+	templateMap := make(map[string]bool, len(tapp.Spec.TemplatePool))
+	for k := range tapp.Spec.TemplatePool {
+		templateMap[k] = true
+	}
+	for _, template_used := range tapp.Spec.Templates {
+		delete(templateMap, template_used)
+	}
+	for template_unused := range templateMap {
+		delete(tapp.Spec.TemplatePool, template_unused)
+	}
 	return nil
 }
 
