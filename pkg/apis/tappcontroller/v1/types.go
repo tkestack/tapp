@@ -25,6 +25,9 @@ import (
 const (
 	DefaultTemplateName = "default"
 	TAppInstanceKey     = "tapp_instance_key"
+
+	// If its value is false, it means pod is being updated.
+	InPlaceUpdateReady corev1.PodConditionType = "tkestack.io/InPlaceUpdate"
 )
 
 // +genclient
