@@ -199,10 +199,26 @@ func (syncer *InstanceSyncer) createInstance(ins *Instance) error {
 	if exists {
 		return fmt.Errorf("instance exits, should delete first")
 	}
+
+	// TODO: add an option for it?
+	addInPlaceUpdateReadinessGate(ins)
+
 	if err := syncer.Create(ins); err != nil {
 		return err
 	}
 	return nil
+}
+
+func addInPlaceUpdateReadinessGate(ins *Instance) {
+	// https://github.com/kubernetes/enhancements/blob/master/keps/sig-network/0007-pod-ready++.md
+	pod := ins.pod
+	for _, r := range pod.Spec.ReadinessGates {
+		if r.ConditionType == tappv1.InPlaceUpdateReady {
+			return
+		}
+	}
+	pod.Spec.ReadinessGates = append(pod.Spec.ReadinessGates,
+		corev1.PodReadinessGate{ConditionType: tappv1.InPlaceUpdateReady})
 }
 
 // Delete deletes the given instance
@@ -410,7 +426,7 @@ func (p *ApiServerInstanceClient) Update(real *Instance, expected *Instance) err
 		_, err = pc.Update(rp)
 		if err == nil {
 			p.event(real.parent, "Update", fmt.Sprintf("Instance: %v", real.pod.Name), nil)
-			return nil
+			break
 		}
 		klog.Errorf("Failed to update pod %s, will retry: %v", getPodFullName(rp), err)
 		if rp, err = pc.Get(pod.Name, metav1.GetOptions{}); err != nil {
@@ -418,34 +434,6 @@ func (p *ApiServerInstanceClient) Update(real *Instance, expected *Instance) err
 		}
 	}
 	p.event(real.parent, "Update", fmt.Sprintf("Instance: %v", real.pod.Name), err)
-
-	// Update pod Ready condition
-	// Workaround for bug https://github.com/kubernetes/kubernetes/issues/91667
-	// TODO: Remove it after fixing the bug.
-	if err == nil {
-		go func() {
-			for {
-				pod, err := pc.Get(pod.Name, metav1.GetOptions{})
-				if err != nil && apierrors.IsNotFound(err) {
-					break
-				}
-				klog.V(5).Infof("Update pod %v Ready condition to false", getPodFullName(pod))
-				for i, condition := range pod.Status.Conditions {
-					if condition.Type == corev1.PodReady {
-						pod.Status.Conditions[i].Status = corev1.ConditionFalse
-						pod.Status.Conditions[i].Reason = "TAppUpdate"
-						if _, err := pc.UpdateStatus(pod); err == nil {
-							break
-						} else {
-							klog.Errorf("Failed to update pod %v Ready condition to false: %v, try again",
-								getPodFullName(pod), err)
-						}
-					}
-				}
-			}
-		}()
-	}
-
 	return err
 }
 

@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	tappv1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
@@ -1036,7 +1037,107 @@ func (c *Controller) updateTAppStatus(tapp *tappv1.TApp, pods []*corev1.Pod) err
 func (c *Controller) syncTApp(tapp *tappv1.TApp, pods []*corev1.Pod) {
 	klog.V(4).Infof("Syncing tapp %s with %d pods", util.GetTAppFullName(tapp), len(pods))
 	add, del, forceDel, update := c.instanceToSync(tapp, pods)
+	c.syncPodConditions(pods, append(del, update...))
 	c.syncer.SyncInstances(add, del, forceDel, update)
+}
+
+func (c *Controller) syncPodConditions(allPods []*corev1.Pod, notReadyInstances []*Instance) {
+	var wg sync.WaitGroup
+	wg.Add(len(allPods))
+
+	notReadyPods := make(sets.String)
+	for _, ins := range notReadyInstances {
+		notReadyPods.Insert(getPodFullName(ins.pod))
+	}
+	for _, pod := range allPods {
+		if notReadyPods.Has(getPodFullName(pod)) {
+			go func(pod *corev1.Pod) {
+				defer wg.Done()
+				klog.V(4).Infof("Set pod %v %v to false because pod will not be ready",
+					getPodFullName(pod), tappv1.InPlaceUpdateReady)
+				setInPlaceUpdateCondition(c.kubeclient, pod, corev1.ConditionFalse)
+			}(pod)
+		} else {
+			go func(pod *corev1.Pod) {
+				defer wg.Done()
+				c.syncInPlaceUpdateCondition(pod)
+			}(pod)
+		}
+	}
+	wg.Wait()
+}
+
+func (c *Controller) syncInPlaceUpdateCondition(pod *corev1.Pod) {
+	status := corev1.ConditionTrue
+	if pod.Status.Phase == corev1.PodRunning && isUpdating(pod) {
+		status = corev1.ConditionFalse
+	}
+	setInPlaceUpdateCondition(c.kubeclient, pod, status)
+}
+
+func setInPlaceUpdateCondition(kubeclient kubernetes.Interface, pod *corev1.Pod, status corev1.ConditionStatus) {
+	if kubeclient == nil {
+		klog.V(4).Infof("Skip setInPlaceUpdateCondition because kubeclient is nil")
+		return
+	}
+	for r := 0; r < statusUpdateRetries; r++ {
+		needUpdate := true
+		found := false
+		for i, c := range pod.Status.Conditions {
+			if c.Type == tappv1.InPlaceUpdateReady {
+				found = true
+				if c.Status != status {
+					pod.Status.Conditions[i].Status = status
+					pod.Status.Conditions[i].LastTransitionTime = metav1.Now()
+				} else {
+					needUpdate = false
+				}
+				break
+			}
+		}
+		if !found {
+			pod.Status.Conditions = append(pod.Status.Conditions, corev1.PodCondition{
+				Type:               tappv1.InPlaceUpdateReady,
+				Status:             status,
+				LastTransitionTime: metav1.Now(),
+			})
+		}
+
+		if !needUpdate {
+			return
+		}
+
+		// If status is False, we also need to update Ready condition to False immediately
+		if status == corev1.ConditionFalse {
+			for i, c := range pod.Status.Conditions {
+				if c.Type == corev1.PodReady {
+					if c.Status != corev1.ConditionFalse {
+						pod.Status.Conditions[i].Status = corev1.ConditionFalse
+						pod.Status.Conditions[i].LastTransitionTime = metav1.Now()
+					}
+					break
+				}
+			}
+		}
+
+		klog.V(3).Infof("Update pod %v %v condition to %v", getPodFullName(pod),
+			tappv1.InPlaceUpdateReady, status)
+		if _, err := kubeclient.CoreV1().Pods(pod.Namespace).UpdateStatus(pod); err != nil && errors.IsConflict(err) {
+			klog.Errorf("Conflict to update pod %v condition, retrying", getPodFullName(pod))
+			newPod, err := kubeclient.CoreV1().Pods(pod.Namespace).Get(pod.Name, metav1.GetOptions{})
+			if err != nil {
+				klog.Errorf("Failed to get pod %v: %v, retrying...", getPodFullName(pod), err)
+			} else {
+				pod = newPod
+			}
+		} else {
+			if err != nil {
+				klog.Errorf("Failed to update pod %v %v condition to %v: %v", getPodFullName(pod),
+					tappv1.InPlaceUpdateReady, status, err)
+			}
+			return
+		}
+	}
 }
 
 // isUpdating returns true if kubelet is updating image for pod, otherwise returns false
@@ -1055,7 +1156,8 @@ func isUpdating(pod *corev1.Pod) bool {
 				status.Name, pod.Namespace, pod.Name)
 		} else if !isSameImage(expectedImage, status.Image) || len(status.ImageID) == 0 {
 			// status.ImageID == "" means pulling image now
-			klog.V(5).Infof("Pod %s/%s is updating", pod.Namespace, pod.Name)
+			klog.V(5).Infof("Pod %s/%s is updating: %v(expected) vs %v(got), imageId: %v",
+				pod.Namespace, pod.Name, expectedImage, status.Image, status.ImageID)
 			return true
 		}
 	}
