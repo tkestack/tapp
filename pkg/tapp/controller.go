@@ -435,6 +435,8 @@ func (c *Controller) preprocessTApp(tapp *tappv1.TApp) error {
 		newTapp = tapp.DeepCopy()
 	}
 
+	c.setDefaultValue(newTapp)
+
 	err = c.removeUnusedTemplate(newTapp)
 	if err != nil {
 		klog.Errorf("Failed to remove unused template for tapp %s: %v", util.GetTAppFullName(tapp), err)
@@ -475,6 +477,17 @@ func (c *Controller) preprocessTApp(tapp *tappv1.TApp) error {
 	newTapp.DeepCopyInto(tapp)
 
 	return nil
+}
+
+func (c *Controller) setDefaultValue(tapp *tappv1.TApp) {
+	// Set default value for UpdateStrategy
+	if len(tapp.Spec.UpdateStrategy.Template) == 0 {
+		tapp.Spec.UpdateStrategy.Template = tappv1.DefaultRollingUpdateTemplateName
+	}
+	if tapp.Spec.UpdateStrategy.MaxUnavailable == nil {
+		maxUnavailable := int32(tappv1.DefaultMaxUnavailable)
+		tapp.Spec.UpdateStrategy.MaxUnavailable = &maxUnavailable
+	}
 }
 
 func (c *Controller) removeUnusedTemplate(tapp *tappv1.TApp) error {
