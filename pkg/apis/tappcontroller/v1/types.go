@@ -31,6 +31,8 @@ const (
 
 	// DefaultMaxUnavailable is the default value for .Spec.UpdateStrategy.MaxUnavailable
 	DefaultMaxUnavailable = 1
+	// DefaultRollingUpdateTemplateName is the default value for .Spec.UpdateStrategy.Template
+	DefaultRollingUpdateTemplateName = "default"
 )
 
 // +genclient
