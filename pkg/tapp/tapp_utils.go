@@ -125,7 +125,11 @@ func isInstanceAlive(status v1.InstanceStatus) bool {
 }
 
 func getRollingTemplateKey(tapp *v1.TApp) string {
-	return tapp.Spec.UpdateStrategy.Template
+	if len(tapp.Spec.UpdateStrategy.Template) != 0 {
+		return tapp.Spec.UpdateStrategy.Template
+	} else {
+		return v1.DefaultRollingUpdateTemplateName
+	}
 }
 
 func shouldRollUpdate(tapp *v1.TApp, updates []*Instance) bool {

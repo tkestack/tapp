@@ -28,6 +28,11 @@ const (
 
 	// If its value is false, it means pod is being updated.
 	InPlaceUpdateReady corev1.PodConditionType = "tkestack.io/InPlaceUpdate"
+
+	// DefaultMaxUnavailable is the default value for .Spec.UpdateStrategy.MaxUnavailable
+	DefaultMaxUnavailable = 1
+	// DefaultRollingUpdateTemplateName is the default value for .Spec.UpdateStrategy.Template
+	DefaultRollingUpdateTemplateName = "default"
 )
 
 // +genclient
@@ -97,7 +102,7 @@ type TAppSpec struct {
 type TAppUpdateStrategy struct {
 	// Template is the rolling update template name
 	Template string `json:"template,omitempty"`
-	// MaxUnavailable is the max unavailable number when tapp is rolling update, default is infinite.
+	// MaxUnavailable is the max unavailable number when tapp is rolling update, default is 1.
 	MaxUnavailable *int32 `json:"maxUnavailable,omitempty"`
 }
 

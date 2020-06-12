@@ -79,7 +79,7 @@ type TAppSpec struct {
 type TAppUpdateStrategy struct {
 	// Template is the rolling update template name
 	Template string `json:"template,omitempty"`
-	// MaxUnavailable is the max unavailable number when tapp is rolling update, default is infinite.
+	// MaxUnavailable is the max unavailable number when tapp is rolling update, default is 1.
 	MaxUnavailable *int32 `json:"maxUnavailable,omitempty"`
 }
 
@@ -213,7 +213,7 @@ Tapp controller will do **in-place update** for pod if only containers' images a
 
 * Rolling update
 
-  Create a new template in `spec.templatePool` and specify template to pod using `spec.templates`, or update existing template in `spec.templatePool`. And use `Spec.UpdateStrategy.Template` to specify the rolling update template, add `Spec.UpdateStrategy.MaxUnavailable` to specify max unavailable pods(default: infinite).
+  Create a new template in `spec.templatePool` and specify template to pod using `spec.templates`, or update existing template in `spec.templatePool`. And use `Spec.UpdateStrategy.Template` to specify the rolling update template, add `Spec.UpdateStrategy.MaxUnavailable` to specify max unavailable pods(default: 1).
 
   ```yaml
   $ # edit tapp.yaml, update pod 1 to use template test2.

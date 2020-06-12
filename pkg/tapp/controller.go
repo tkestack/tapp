@@ -784,10 +784,12 @@ func (c *Controller) transformPodActions(tapp *tappv1.TApp, podActions map[strin
 		}
 	}
 
-	minAvailablePods := 0
+	maxUnavailable := tappv1.DefaultMaxUnavailable
 	if tapp.Spec.UpdateStrategy.MaxUnavailable != nil {
-		minAvailablePods = desiredRunningPods.Len() - int(*tapp.Spec.UpdateStrategy.MaxUnavailable)
+		maxUnavailable = int(*tapp.Spec.UpdateStrategy.MaxUnavailable)
 	}
+	minAvailablePods := desiredRunningPods.Len() - maxUnavailable
+
 	// First sort ids.
 	sort.Slice(rollingUpdateIds, func(i, j int) bool {
 		id1, _ := strconv.Atoi(rollingUpdateIds[i])
