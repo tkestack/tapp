@@ -30,6 +30,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func newFakeTAppController() (*Controller, *fakeInstanceClient) {
@@ -553,8 +554,8 @@ func createTAppWithRollUpdate(replica int) (*tappv1.TApp, string, string, error)
 		tapp.Annotations = make(map[string]string)
 	}
 	tapp.Spec.UpdateStrategy.Template = rollUpdateTemplate
-	tapp.Spec.UpdateStrategy.MaxUnavailable = new(int32)
-	*tapp.Spec.UpdateStrategy.MaxUnavailable = 1
+	tapp.Spec.UpdateStrategy.MaxUnavailable = new(intstr.IntOrString)
+	*tapp.Spec.UpdateStrategy.MaxUnavailable = intstr.FromInt(1)
 
 	template = testutil.CreateValidPodTemplate()
 	image = template.Spec.Containers[0].Image
