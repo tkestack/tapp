@@ -19,7 +19,6 @@ package tapp
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -73,6 +72,7 @@ func newInstanceWithPod(tapp *tappv1.TApp, pod *corev1.Pod) (*Instance, error) {
 	if id, err := getPodIndex(pod); err == nil {
 		return &Instance{pod, id, tapp}, nil
 	} else {
+		klog.Errorf("Failed to new instance with pod %v: %v", getPodFullName(pod), err)
 		return nil, err
 	}
 }
@@ -84,11 +84,13 @@ func getTAppKind() schema.GroupVersionKind {
 func newInstance(tapp *tappv1.TApp, id string) (*Instance, error) {
 	template, err := getPodTemplate(&tapp.Spec, id)
 	if err != nil {
+		klog.Errorf("Failed to newInstance %s-%s: %v", util.GetTAppFullName(tapp), id, err)
 		return nil, err
 	}
 
 	pod, err := util.GetPodFromTemplate(template, tapp, getControllerRef(tapp))
 	if err != nil {
+		klog.Errorf("Failed to newInstance %s-%s: %v", util.GetTAppFullName(tapp), id, err)
 		return nil, err
 	}
 	for _, im := range newIdentityMappers(tapp) {
@@ -197,10 +199,26 @@ func (syncer *InstanceSyncer) createInstance(ins *Instance) error {
 	if exists {
 		return fmt.Errorf("instance exits, should delete first")
 	}
+
+	// TODO: add an option for it?
+	addInPlaceUpdateReadinessGate(ins)
+
 	if err := syncer.Create(ins); err != nil {
 		return err
 	}
 	return nil
+}
+
+func addInPlaceUpdateReadinessGate(ins *Instance) {
+	// https://github.com/kubernetes/enhancements/blob/master/keps/sig-network/0007-pod-ready++.md
+	pod := ins.pod
+	for _, r := range pod.Spec.ReadinessGates {
+		if r.ConditionType == tappv1.InPlaceUpdateReady {
+			return
+		}
+	}
+	pod.Spec.ReadinessGates = append(pod.Spec.ReadinessGates,
+		corev1.PodReadinessGate{ConditionType: tappv1.InPlaceUpdateReady})
 }
 
 // Delete deletes the given instance
@@ -408,7 +426,7 @@ func (p *ApiServerInstanceClient) Update(real *Instance, expected *Instance) err
 		_, err = pc.Update(rp)
 		if err == nil {
 			p.event(real.parent, "Update", fmt.Sprintf("Instance: %v", real.pod.Name), nil)
-			return nil
+			break
 		}
 		klog.Errorf("Failed to update pod %s, will retry: %v", getPodFullName(rp), err)
 		if rp, err = pc.Get(pod.Name, metav1.GetOptions{}); err != nil {
@@ -416,34 +434,6 @@ func (p *ApiServerInstanceClient) Update(real *Instance, expected *Instance) err
 		}
 	}
 	p.event(real.parent, "Update", fmt.Sprintf("Instance: %v", real.pod.Name), err)
-
-	// Update pod Ready condition
-	// Workaround for bug https://github.com/kubernetes/kubernetes/issues/91667
-	// TODO: Remove it after fixing the bug.
-	if err == nil {
-		go func() {
-			for {
-				pod, err := pc.Get(pod.Name, metav1.GetOptions{})
-				if err != nil && apierrors.IsNotFound(err) {
-					break
-				}
-				klog.V(5).Infof("Update pod %v Ready condition to false", getPodFullName(pod))
-				for i, condition := range pod.Status.Conditions {
-					if condition.Type == corev1.PodReady {
-						pod.Status.Conditions[i].Status = corev1.ConditionFalse
-						pod.Status.Conditions[i].Reason = "TAppUpdate"
-						if _, err := pc.UpdateStatus(pod); err == nil {
-							break
-						} else {
-							klog.Errorf("Failed to update pod %v Ready condition to false: %v, try again",
-								getPodFullName(pod), err)
-						}
-					}
-				}
-			}
-		}()
-	}
-
 	return err
 }
 
@@ -469,15 +459,4 @@ type defaultInstanceHealthChecker struct{}
 
 func (d *defaultInstanceHealthChecker) isDying(pod *corev1.Pod) bool {
 	return pod != nil && pod.DeletionTimestamp != nil
-}
-
-type InstanceSortWithId []*Instance
-
-func (o InstanceSortWithId) Len() int      { return len(o) }
-func (o InstanceSortWithId) Swap(i, j int) { o[i], o[j] = o[j], o[i] }
-
-func (o InstanceSortWithId) Less(i, j int) bool {
-	id1, _ := strconv.Atoi(o[i].id)
-	id2, _ := strconv.Atoi(o[j].id)
-	return id1 < id2
 }
