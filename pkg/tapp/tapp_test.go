@@ -30,6 +30,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func newFakeTAppController() (*Controller, *fakeInstanceClient) {
@@ -487,12 +488,13 @@ func buildPods(tapp *tappv1.TApp) []*corev1.Pod {
 }
 
 type RollUpdateTestUnit struct {
-	states  []InstanceTestState
-	updates []int
+	states         []InstanceTestState
+	updates        []int
+	maxUnavailable intstr.IntOrString
 }
 
 func (u *RollUpdateTestUnit) test(t *testing.T) {
-	tapp, pods, updates, _, err := createRollUpdateTestValues(u.states)
+	tapp, pods, updates, _, err := createRollUpdateTestValues(u.states, u.maxUnavailable)
 	if err != nil {
 		t.Errorf("%+v", err)
 	}
@@ -537,7 +539,7 @@ const (
 	emptyState InstanceTestState = "nil"
 )
 
-func createTAppWithRollUpdate(replica int) (*tappv1.TApp, string, string, error) {
+func createTAppWithRollUpdate(replica int, maxUnavailable intstr.IntOrString) (*tappv1.TApp, string, string, error) {
 	tapp := testutil.CreateValidTApp(replica)
 	rollUpdateTemplate := "rollupdate"
 	forceUpdateTemplate := "forceupdate"
@@ -553,8 +555,8 @@ func createTAppWithRollUpdate(replica int) (*tappv1.TApp, string, string, error)
 		tapp.Annotations = make(map[string]string)
 	}
 	tapp.Spec.UpdateStrategy.Template = rollUpdateTemplate
-	tapp.Spec.UpdateStrategy.MaxUnavailable = new(int32)
-	*tapp.Spec.UpdateStrategy.MaxUnavailable = 1
+	tapp.Spec.UpdateStrategy.MaxUnavailable = new(intstr.IntOrString)
+	*tapp.Spec.UpdateStrategy.MaxUnavailable = maxUnavailable
 
 	template = testutil.CreateValidPodTemplate()
 	image = template.Spec.Containers[0].Image
@@ -604,9 +606,9 @@ func extractPodStatus(pods []*corev1.Pod) []InstanceTestState {
 	return states
 }
 
-func createRollUpdateTestValues(instances []InstanceTestState) (*tappv1.TApp, []*corev1.Pod, []*Instance, []*Instance, error) {
+func createRollUpdateTestValues(instances []InstanceTestState, maxUnavailable intstr.IntOrString) (*tappv1.TApp, []*corev1.Pod, []*Instance, []*Instance, error) {
 	replica := len(instances)
-	tapp, rollUpdateId, forceUpdateId, err := createTAppWithRollUpdate(replica)
+	tapp, rollUpdateId, forceUpdateId, err := createTAppWithRollUpdate(replica, maxUnavailable)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -659,93 +661,224 @@ func createRollUpdateTestValues(instances []InstanceTestState) (*tappv1.TApp, []
 
 func TestRollingUpdate(t *testing.T) {
 	tests := []RollUpdateTestUnit{
+		// MaxUnavailable int
 		// no effect to normal
 		{
 			[]InstanceTestState{ready, ready, ready},
 			[]int{},
+			intstr.FromInt(1),
 		},
 		{
 			[]InstanceTestState{ready, ready, notReady},
 			[]int{},
+			intstr.FromInt(1),
 		},
 		{
 			[]InstanceTestState{ready, ready, update},
 			[]int{2},
+			intstr.FromInt(1),
 		},
 		{
 			[]InstanceTestState{ready, ready, deading},
 			[]int{},
+			intstr.FromInt(1),
 		},
 		{
 			[]InstanceTestState{ready, ready, killed},
 			[]int{},
+			intstr.FromInt(1),
 		},
 		{
 			[]InstanceTestState{ready, ready, complete},
 			[]int{},
+			intstr.FromInt(1),
 		},
 		// add a rollupdate
 		{
 			[]InstanceTestState{rollUpdate, ready, ready, ready},
 			[]int{0},
+			intstr.FromInt(1),
 		},
 		{
 			[]InstanceTestState{rollUpdate, ready, ready, notReady},
 			[]int{},
+			intstr.FromInt(1),
 		},
 		{
 			[]InstanceTestState{rollUpdate, ready, ready, update},
 			[]int{3},
+			intstr.FromInt(1),
 		},
 		{
 			[]InstanceTestState{rollUpdate, ready, ready, deading},
 			[]int{},
+			intstr.FromInt(1),
 		},
 		{
 			[]InstanceTestState{rollUpdate, ready, ready, killed},
 			[]int{0},
+			intstr.FromInt(1),
 		},
 		{
 			[]InstanceTestState{rollUpdate, ready, ready, complete},
 			[]int{},
+			intstr.FromInt(1),
 		},
 		{
 			[]InstanceTestState{rollUpdate, rollupdateNotready, ready, complete},
 			[]int{1},
+			intstr.FromInt(1),
 		},
 		{
 			[]InstanceTestState{rollupdateNotready, rollupdateNotready, ready, ready},
 			[]int{0, 1},
+			intstr.FromInt(1),
 		},
 		// add 2 rollupdate
 		{
 			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, ready},
 			[]int{0},
+			intstr.FromInt(1),
 		},
 		{
 			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, notReady},
 			[]int{},
+			intstr.FromInt(1),
 		},
 		{
 			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, update},
 			[]int{4},
+			intstr.FromInt(1),
 		},
 		{
 			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, deading},
 			[]int{},
+			intstr.FromInt(1),
 		},
 		{
 			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, killed},
 			[]int{0},
+			intstr.FromInt(1),
 		},
 		{
 			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, complete},
 			[]int{},
+			intstr.FromInt(1),
 		},
 		// more update
 		{
 			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, update, update},
 			[]int{4, 5},
+			intstr.FromInt(1),
+		},
+		//MaxUnavailable str
+		{
+			[]InstanceTestState{ready, ready, ready},
+			[]int{},
+			intstr.FromString("25%"),
+		},
+		{
+			[]InstanceTestState{ready, ready, notReady},
+			[]int{},
+			intstr.FromString("25%"),
+		},
+		{
+			[]InstanceTestState{ready, ready, update},
+			[]int{2},
+			intstr.FromString("25%"),
+		},
+		{
+			[]InstanceTestState{ready, ready, deading},
+			[]int{},
+			intstr.FromString("25%"),
+		},
+		{
+			[]InstanceTestState{ready, ready, killed},
+			[]int{},
+			intstr.FromString("25%"),
+		},
+		{
+			[]InstanceTestState{ready, ready, complete},
+			[]int{},
+			intstr.FromString("25%"),
+		},
+		// add a rollupdate
+		{
+			[]InstanceTestState{rollUpdate, ready, ready, ready},
+			[]int{0},
+			intstr.FromString("25%"),
+		},
+		{
+			[]InstanceTestState{rollUpdate, ready, ready, notReady},
+			[]int{},
+			intstr.FromString("25%"),
+		},
+		{
+			[]InstanceTestState{rollUpdate, ready, ready, update},
+			[]int{3},
+			intstr.FromString("25%"),
+		},
+		{
+			[]InstanceTestState{rollUpdate, ready, ready, deading},
+			[]int{},
+			intstr.FromString("25%"),
+		},
+		{
+			[]InstanceTestState{rollUpdate, ready, ready, killed},
+			[]int{0},
+			intstr.FromString("25%"),
+		},
+		{
+			[]InstanceTestState{rollUpdate, ready, ready, complete},
+			[]int{},
+			intstr.FromString("25%"),
+		},
+		{
+			[]InstanceTestState{rollUpdate, rollupdateNotready, ready, complete},
+			[]int{1},
+			intstr.FromString("25%"),
+		},
+		{
+			[]InstanceTestState{rollupdateNotready, rollupdateNotready, ready, ready},
+			[]int{0, 1},
+			intstr.FromString("25%"),
+		},
+		// add 2 rollupdate
+		{
+			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, ready},
+			[]int{0, 1},
+			intstr.FromString("25%"),
+		},
+		{
+			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, notReady},
+			[]int{0},
+			intstr.FromString("25%"),
+		},
+		{
+			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, update},
+			[]int{0, 4},
+			intstr.FromString("25%"),
+		},
+		{
+			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, deading},
+			[]int{0},
+			intstr.FromString("25%"),
+		},
+		{
+			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, killed},
+			[]int{0},
+			intstr.FromString("25%"),
+		},
+		{
+			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, complete},
+			[]int{0},
+			intstr.FromString("25%"),
+		},
+		// more update
+		{
+			[]InstanceTestState{rollUpdate, rollUpdate, ready, ready, update, update},
+			[]int{4, 5},
+			intstr.FromString("25%"),
 		},
 	}
 

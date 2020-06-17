@@ -37,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -485,7 +486,7 @@ func (c *Controller) setDefaultValue(tapp *tappv1.TApp) {
 		tapp.Spec.UpdateStrategy.Template = tappv1.DefaultRollingUpdateTemplateName
 	}
 	if tapp.Spec.UpdateStrategy.MaxUnavailable == nil {
-		maxUnavailable := int32(tappv1.DefaultMaxUnavailable)
+		maxUnavailable := intstr.FromInt(tappv1.DefaultMaxUnavailable)
 		tapp.Spec.UpdateStrategy.MaxUnavailable = &maxUnavailable
 	}
 }
@@ -823,7 +824,12 @@ func (c *Controller) transformPodActions(tapp *tappv1.TApp, podActions map[strin
 
 	maxUnavailable := tappv1.DefaultMaxUnavailable
 	if tapp.Spec.UpdateStrategy.MaxUnavailable != nil {
-		maxUnavailable = int(*tapp.Spec.UpdateStrategy.MaxUnavailable)
+		var err error
+		maxUnavailable, err = intstr.GetValueFromIntOrPercent(tapp.Spec.UpdateStrategy.MaxUnavailable, desiredRunningPods.Len(), true)
+		if err != nil {
+			klog.Errorf("invalid value for MaxUnavailable: %v", err)
+			return
+		}
 	}
 	minAvailablePods := desiredRunningPods.Len() - maxUnavailable
 
