@@ -397,7 +397,7 @@ func testInstanceStatus(t *testing.T, id string, expected, real tappv1.InstanceS
 }
 
 func TestInstanceStatus(t *testing.T) {
-	replica := 16
+	replica := 17
 	tapp := testutil.CreateValidTApp(replica)
 
 	pods := buildPods(tapp)
@@ -458,6 +458,10 @@ func TestInstanceStatus(t *testing.T) {
 		case "15":
 			pod.Status.Phase = corev1.PodRunning
 			tapp.Status.Statuses[index] = tappv1.InstanceKilled
+		// Restart a killed pod, but without a new pod
+		case "16":
+			tapp.Spec.Statuses[index] = "Running"
+			tapp.Status.Statuses[index] = tappv1.InstanceKilled
 		}
 		newPods = append(newPods, pod)
 	}
@@ -469,7 +473,7 @@ func TestInstanceStatus(t *testing.T) {
 		"2": tappv1.InstanceRunning, "3": tappv1.InstanceSucc, "4": tappv1.InstancePodFailed, "5": tappv1.InstanceUnknown,
 		"6": tappv1.InstanceKilling, "7": tappv1.InstanceRunning, "8": tappv1.InstanceKilled, "9": tappv1.InstanceFailed,
 		"10": tappv1.InstanceSucc, "11": tappv1.InstanceNotCreated, "12": tappv1.InstanceSucc, "13": tappv1.InstanceRunning,
-		"14": tappv1.InstancePending, "15": tappv1.InstanceRunning,
+		"14": tappv1.InstancePending, "15": tappv1.InstanceRunning, "16": tappv1.InstanceKilled,
 	}
 	for id, status := range tapp.Status.Statuses {
 		testInstanceStatus(t, id, expectedStatuses[id], status)
