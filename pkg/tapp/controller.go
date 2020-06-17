@@ -957,8 +957,8 @@ func getInstanceStatus(tapp *tappv1.TApp, pods []*corev1.Pod) map[string]tappv1.
 	for i := 0; i < int(tapp.Spec.Replicas); i++ {
 		id := strconv.Itoa(i)
 		if _, ok := statuses[id]; !ok {
-			if status, ok := tapp.Spec.Statuses[id]; ok {
-				statuses[id] = status
+			if tapp.Spec.Statuses[id] == tappv1.InstanceKilled {
+				statuses[id] = tappv1.InstanceKilled
 			} else if isInstanceFinished(tapp.Status.Statuses[id]) {
 				statuses[id] = tapp.Status.Statuses[id]
 			} else {
