@@ -306,7 +306,8 @@ func (c *Controller) getPodsForTApp(tapp *tappv1.TApp) ([]*corev1.Pod, error) {
 	}
 	result := make([]*corev1.Pod, 0, len(pods))
 	for i := range pods {
-		result = append(result, &(*pods[i]))
+		// TODO: does it impact performance?
+		result = append(result, pods[i].DeepCopy())
 	}
 	return result, nil
 }
