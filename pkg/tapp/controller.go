@@ -1154,6 +1154,10 @@ func setInPlaceUpdateCondition(kubeclient kubernetes.Interface, pod *corev1.Pod,
 					if c.Status != corev1.ConditionFalse {
 						pod.Status.Conditions[i].Status = corev1.ConditionFalse
 						pod.Status.Conditions[i].LastTransitionTime = metav1.Now()
+						pod.Status.Conditions[i].Reason = "ReadinessGatesNotReady"
+						pod.Status.Conditions[i].Message =
+							fmt.Sprintf("the status of pod readiness gate %q is not \"True\", but %v",
+								string(tappv1.InPlaceUpdateReady), corev1.ConditionFalse)
 					}
 					break
 				}
