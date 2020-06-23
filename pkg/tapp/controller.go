@@ -591,7 +591,7 @@ func getDesiredInstance(tapp *tappv1.TApp) (running, completed sets.String) {
 	if !getDeletePodAfterAppFinish() || isTAppFinished(tapp) {
 		for id, status := range tapp.Status.Statuses {
 			// Instance finished
-			if isInstanceFinished(status) {
+			if status == tappv1.InstanceFailed || status == tappv1.InstanceSucc {
 				completed.Insert(id)
 			}
 		}

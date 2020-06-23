@@ -91,8 +91,8 @@ func TestGetDesiredInstance(t *testing.T) {
 			Name:                          "TestGetDesiredInstance1",
 			AppStatus:                     tappv1.AppRunning,
 			EnableDeletePodAfterAppFinish: false,
-			ExpectedRunning:               []string{"1", "2", "3", "4", "5", "6", "7", "11"},
-			ExpectedCompleted:             []string{"0", "8", "9", "10"},
+			ExpectedRunning:               []string{"1", "2", "3", "4", "5", "6", "7", "8", "11"},
+			ExpectedCompleted:             []string{"0", "9", "10"},
 		},
 		{
 			Name:                          "TestGetDesiredInstance2",
@@ -105,8 +105,8 @@ func TestGetDesiredInstance(t *testing.T) {
 			Name:                          "TestGetDesiredInstance2",
 			AppStatus:                     tappv1.AppSucc,
 			EnableDeletePodAfterAppFinish: true,
-			ExpectedRunning:               []string{"1", "2", "3", "4", "5", "6", "7", "11"},
-			ExpectedCompleted:             []string{"0", "8", "9", "10"},
+			ExpectedRunning:               []string{"1", "2", "3", "4", "5", "6", "7", "8", "11"},
+			ExpectedCompleted:             []string{"0", "9", "10"},
 		},
 	}
 
