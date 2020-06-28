@@ -20,7 +20,7 @@ package tapp
 import (
 	"testing"
 
-	"tkestack.io/tapp/pkg/hash"
+	hashv1 "tkestack.io/tapp/pkg/hash/v1"
 	"tkestack.io/tapp/pkg/testutil"
 
 	corev1 "k8s.io/api/core/v1"
@@ -38,7 +38,7 @@ func TestMergePod(t *testing.T) {
 	newPod := pod.DeepCopy()
 	newPod.Spec.Containers[0].Image = "image.new"
 	newPod.Spec.Containers[0].Name = "name.new"
-	newPod.Labels[hash.TemplateHashKey] = "tappHashKey.new"
+	newPod.Labels[hashv1.TemplateHashKey] = "tappHashKey.new"
 	mergePod(pod, newPod)
 	if pod.Spec.Containers[0].Image != newPod.Spec.Containers[0].Image {
 		t.Errorf("pod image not updated")
@@ -46,7 +46,7 @@ func TestMergePod(t *testing.T) {
 	if pod.Spec.Containers[0].Name == newPod.Spec.Containers[0].Name {
 		t.Errorf("pod name updated")
 	}
-	if pod.Labels[hash.TemplateHashKey] != newPod.Labels[hash.TemplateHashKey] {
+	if pod.Labels[hashv1.TemplateHashKey] != newPod.Labels[hashv1.TemplateHashKey] {
 		t.Errorf("TAppHashKey not updated")
 	}
 

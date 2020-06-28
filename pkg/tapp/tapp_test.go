@@ -25,7 +25,6 @@ import (
 	"time"
 
 	tappv1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
-	"tkestack.io/tapp/pkg/hash"
 	"tkestack.io/tapp/pkg/testutil"
 
 	corev1 "k8s.io/api/core/v1"
@@ -37,7 +36,6 @@ func newFakeTAppController() (*Controller, *fakeInstanceClient) {
 	return &Controller{
 		kubeclient:     nil,
 		podStoreSynced: func() bool { return true },
-		tappHash:       hash.NewTappHash(),
 		syncer:         InstanceSyncer{InstanceClient: fakeClient},
 	}, fakeClient
 }

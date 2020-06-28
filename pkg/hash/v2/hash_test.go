@@ -15,7 +15,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package hash
+package v2
 
 import (
 	"testing"
@@ -34,6 +34,11 @@ func TestSetTemplateHash(t *testing.T) {
 	if expectedTemplateHash != realHash {
 		t.Errorf("Failed to set template h")
 	}
+	// expectedHashValue is current hash value according to current algorithm and data structures.
+	expectedHashValue := "16703310259724598646"
+	if realHash != expectedHashValue {
+		t.Errorf("Hash values is not expected, got: %s, expected: %s", realHash, expectedHashValue)
+	}
 }
 
 func TestSetUniqHash(t *testing.T) {
@@ -45,6 +50,11 @@ func TestSetUniqHash(t *testing.T) {
 	realHash := h.GetUniqHash(template.Labels)
 	if expectedUniqHash != realHash {
 		t.Errorf("Failed to set uniq h")
+	}
+	// expectedHashValue is current hash value according to current algorithm and data structures.
+	expectedHashValue := "2691283627662810275"
+	if realHash != expectedHashValue {
+		t.Errorf("Hash values is not expected, got: %s, expected: %s", realHash, expectedHashValue)
 	}
 }
 
