@@ -9,6 +9,12 @@ clean:
 build:
 	hack/build.sh
 
+# ==============================================================================
+# Includes
+
+include build/lib/common.mk
+include build/lib/image.mk
+
 # Run test
 #
 # Args:
@@ -37,5 +43,10 @@ push-image:
 	hack/push-image.sh tkestack/tapp-controller:latest
 
 release: build-image push-image
+
+## release.multiarch: Build docker images for multiple platforms and push manifest lists to registry.
+.PHONY: release.multiarch
+release.multiarch:
+	@$(MAKE) image.manifest.push.multiarch BINS="tapp-controller" 
 
 #  vim: set ts=2 sw=2 tw=0 noet :
