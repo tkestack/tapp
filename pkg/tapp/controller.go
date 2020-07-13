@@ -491,6 +491,9 @@ func (c *Controller) setDefaultValue(tapp *tappv1.TApp) {
 }
 
 func (c *Controller) removeUnusedTemplate(tapp *tappv1.TApp) error {
+	if !tapp.Spec.AutoDeleteUnusedTemplate {
+		return nil
+	}
 	templateMap := make(map[string]bool, len(tapp.Spec.TemplatePool))
 	for k := range tapp.Spec.TemplatePool {
 		templateMap[k] = true
