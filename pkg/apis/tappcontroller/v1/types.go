@@ -20,6 +20,7 @@ package v1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
@@ -103,7 +104,7 @@ type TAppUpdateStrategy struct {
 	// Template is the rolling update template name
 	Template string `json:"template,omitempty"`
 	// MaxUnavailable is the max unavailable number when tapp is rolling update, default is 1.
-	MaxUnavailable *int32 `json:"maxUnavailable,omitempty"`
+	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
 }
 
 type InstanceStatus string
