@@ -85,6 +85,10 @@ type TAppSpec struct {
 	// Default values is false.
 	ForceDeletePod bool `json:"forceDeletePod,omitempty"`
 
+	// AutoDeleteUnusedTemplate indicates whether auto delete templates when it is unused.
+	// Default values is false.
+	AutoDeleteUnusedTemplate bool `json:"autoDeleteUnusedTemplate,omitempty"`
+
 	// NeverMigrate indicates whether to migrate pods. If it is true, pods will never be migrated to
 	// other nodes, otherwise it depends on other conditions(e.g. pod restart policy).
 	NeverMigrate bool `json:"neverMigrate,omitempty"`
