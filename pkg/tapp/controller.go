@@ -445,11 +445,6 @@ func (c *Controller) preprocessTApp(tapp *tappv1.TApp) error {
 		return err
 	}
 
-	if err := c.updateTemplateHash(newTapp); err != nil {
-		klog.Errorf("Failed to update template hash for tapp: %s", util.GetTAppFullName(tapp))
-		return err
-	}
-
 	err = c.setLabelSelector(newTapp)
 	if err != nil {
 		klog.Errorf("Failed to setLabelSelector for tapp %s: %v", util.GetTAppFullName(tapp), err)
@@ -514,7 +509,7 @@ func (c *Controller) removeUnusedTemplate(tapp *tappv1.TApp) error {
 }
 
 // updateTemplateHash will generate and update templates hash if needed.
-func (c *Controller) updateTemplateHash(tapp *tappv1.TApp) error {
+func (c *Controller) updateTemplateHash(tapp *tappv1.TApp) {
 	updateHash := func(template *corev1.PodTemplateSpec) {
 		if c.tappHash.SetTemplateHash(template) {
 			c.tappHash.SetUniqHash(template)
@@ -526,8 +521,6 @@ func (c *Controller) updateTemplateHash(tapp *tappv1.TApp) error {
 	for _, template := range tapp.Spec.TemplatePool {
 		updateHash(&template)
 	}
-
-	return nil
 }
 
 func (c *Controller) setLabelSelector(tapp *tappv1.TApp) error {
@@ -660,6 +653,8 @@ func makePodMap(pods []*corev1.Pod) map[string]*corev1.Pod {
 }
 
 func (c *Controller) instanceToSync(tapp *tappv1.TApp, pods []*corev1.Pod) (add, del, forceDel, update []*Instance) {
+	tapp = tapp.DeepCopy()
+	c.updateTemplateHash(tapp)
 	podMap := makePodMap(pods)
 
 	desiredRunningPods, desiredCompletedPods := getDesiredInstance(tapp)
@@ -722,6 +717,9 @@ func (c *Controller) syncRunningPods(tapp *tappv1.TApp, desiredRunningPods sets.
 					klog.V(6).Infof("Skip migrating pod %s, status:%s", getPodFullName(pod), pod.Status.Phase)
 				}
 			} else if c.isTemplateHashChanged(tapp, id, pod) {
+				if template, err := getPodTemplate(&tapp.Spec, id); err != nil {
+					klog.V(4).Infof("Pod %s template changed: %+v -> %+v", getPodFullName(pod), pod, template)
+				}
 				// If template hash changes, it means some thing in pod spec got updated.
 				// If image is updated, we only need restart corresponding container, otherwise
 				// we need recreate the pod because k8s does not support restarting it.
