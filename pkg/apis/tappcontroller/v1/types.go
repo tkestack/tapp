@@ -100,6 +100,13 @@ type TAppSpec struct {
 	// any volumes in the template, with the same name.
 	// TODO: Define the behavior if a claim already exists with the same name.
 	VolumeClaimTemplates []corev1.PersistentVolumeClaim `json:"volumeClaimTemplates,omitempty"`
+
+	// ServiceName is the name of the service that governs this TApp.
+	// This service must exist before the TApp, and is responsible for
+	// the network identity of the set. Pods get DNS/hostnames that follow the
+	// pattern: pod-specific-string.serviceName.default.svc.cluster.local
+	// where "pod-specific-string" is managed by the TApp controller.
+	ServiceName string `json:"serviceName,omitempty"`
 }
 
 // Only support rolling update now
