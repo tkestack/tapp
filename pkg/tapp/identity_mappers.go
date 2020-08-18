@@ -56,11 +56,17 @@ type NameIdentityMapper struct {
 	tapp *tappv1.TApp
 }
 
-// SetIdentity sets the instance namespace and name.
+// SetIdentity sets the instance namespace, name, hostname and subdomain.
 func (n *NameIdentityMapper) SetIdentity(id string, pod *corev1.Pod) {
 	pod.Name = fmt.Sprintf("%v-%v", n.tapp.Name, id)
 	pod.Namespace = n.tapp.Namespace
 	pod.Labels[tappv1.TAppInstanceKey] = id
+
+	if n.tapp.Spec.ServiceName != "" {
+		pod.Spec.Hostname = pod.Name
+		pod.Spec.Subdomain = n.tapp.Spec.ServiceName
+	}
+
 	return
 }
 
