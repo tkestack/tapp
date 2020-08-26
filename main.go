@@ -80,6 +80,8 @@ var (
 
 const (
 	defaultWorkerNumber = 5
+	defaultKubeAPIQPS   = 2000
+	defaultKubeAPIBurst = 2500
 )
 
 func main() {
@@ -128,10 +130,6 @@ func main() {
 
 		go kubeInformerFactory.Start(stop)
 		go tappInformerFactory.Start(stop)
-
-		if worker == 0 {
-			worker = defaultWorkerNumber
-		}
 
 		tapp.SetDeletePodAfterAppFinish(deletePodAfterAppFinish)
 
@@ -197,9 +195,9 @@ func addFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&createCRD, "create-crd", true, "Create TApp CRD if it does not exist")
 	fs.BoolVar(&deletePodAfterAppFinish, "delete-pod-after-app-finish", true,
 		"If true, delete instance pod after app finishes, otherwise delete pod once pod finishes")
-	fs.Float32Var(&kubeAPIQPS, "kube-api-qps", kubeAPIQPS, "QPS to use while talking with kubernetes apiserver")
-	fs.IntVar(&kubeAPIBurst, "kube-api-burst", kubeAPIBurst, "Burst to use while talking with kubernetes apiserver")
-	fs.IntVar(&worker, "worker", worker, "TApp sync worker number, default: 5")
+	fs.Float32Var(&kubeAPIQPS, "kube-api-qps", defaultKubeAPIQPS, "QPS to use while talking with kubernetes apiserver")
+	fs.IntVar(&kubeAPIBurst, "kube-api-burst", defaultKubeAPIBurst, "Burst to use while talking with kubernetes apiserver")
+	fs.IntVar(&worker, "worker", defaultWorkerNumber, "TApp sync worker number, default: 5")
 
 	// Admission related
 	fs.BoolVar(&registerAdmission, "register-admission", false, "Register admission for tapp controller")
