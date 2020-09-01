@@ -52,7 +52,7 @@ func pvcClient(kubeClient kubernetes.Interface, ns string) client.PersistentVolu
 }
 
 func getPodTemplate(spec *v1.TAppSpec, id string) (*corev1.PodTemplateSpec, error) {
-	templateName := getPodTemplateName(spec.Templates, id)
+	templateName := getPodTemplateName(spec.Templates, id, spec.DefaultTemplateName)
 
 	if templateName == v1.DefaultTemplateName {
 		return &spec.Template, nil
@@ -128,7 +128,7 @@ func getRollingTemplateKey(tapp *v1.TApp) string {
 	if len(tapp.Spec.UpdateStrategy.Template) != 0 {
 		return tapp.Spec.UpdateStrategy.Template
 	} else {
-		return v1.DefaultRollingUpdateTemplateName
+		return tapp.Spec.DefaultTemplateName
 	}
 }
 
@@ -139,7 +139,7 @@ func shouldRollUpdate(tapp *v1.TApp, updates []*Instance) bool {
 	}
 
 	for _, update := range updates {
-		if getPodTemplateName(tapp.Spec.Templates, update.id) == template {
+		if getPodTemplateName(tapp.Spec.Templates, update.id, tapp.Spec.DefaultTemplateName) == template {
 			return true
 		}
 	}
@@ -155,9 +155,9 @@ func extractInstanceId(instances []*Instance) []string {
 }
 
 // getPodTemplateName returns template name for pod whose id is podId, default is 'DefaultTemplateName'
-func getPodTemplateName(templates map[string]string, podId string) string {
+func getPodTemplateName(templates map[string]string, podId string, defaultTemplateName string) string {
 	if name, exist := templates[podId]; !exist {
-		return v1.DefaultTemplateName
+		return defaultTemplateName
 	} else {
 		return name
 	}

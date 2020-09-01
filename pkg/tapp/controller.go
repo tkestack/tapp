@@ -480,9 +480,12 @@ func (c *Controller) preprocessTApp(tapp *tappv1.TApp) error {
 }
 
 func (c *Controller) setDefaultValue(tapp *tappv1.TApp) {
+	if tapp.Spec.DefaultTemplateName == "" {
+		tapp.Spec.DefaultTemplateName = tappv1.DefaultTemplateName
+	}
 	// Set default value for UpdateStrategy
 	if len(tapp.Spec.UpdateStrategy.Template) == 0 {
-		tapp.Spec.UpdateStrategy.Template = tappv1.DefaultRollingUpdateTemplateName
+		tapp.Spec.UpdateStrategy.Template = tapp.Spec.DefaultTemplateName
 	}
 	if tapp.Spec.UpdateStrategy.MaxUnavailable == nil {
 		maxUnavailable := int32(tappv1.DefaultMaxUnavailable)
@@ -868,7 +871,7 @@ func (c *Controller) transformPodActions(tapp *tappv1.TApp, podActions map[strin
 
 func isInRollingUpdate(tapp *tappv1.TApp, podId string) bool {
 	rollingTemplateName := getRollingTemplateKey(tapp)
-	templateName := getPodTemplateName(tapp.Spec.Templates, podId)
+	templateName := getPodTemplateName(tapp.Spec.Templates, podId, tapp.Spec.DefaultTemplateName)
 	return templateName == rollingTemplateName
 }
 

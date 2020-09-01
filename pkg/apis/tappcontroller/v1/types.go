@@ -31,8 +31,6 @@ const (
 
 	// DefaultMaxUnavailable is the default value for .Spec.UpdateStrategy.MaxUnavailable
 	DefaultMaxUnavailable = 1
-	// DefaultRollingUpdateTemplateName is the default value for .Spec.UpdateStrategy.Template
-	DefaultRollingUpdateTemplateName = "default"
 )
 
 // +genclient
@@ -107,6 +105,9 @@ type TAppSpec struct {
 	// pattern: pod-specific-string.serviceName.default.svc.cluster.local
 	// where "pod-specific-string" is managed by the TApp controller.
 	ServiceName string `json:"serviceName,omitempty"`
+
+	//DefaultTemplateName is the default template name for scale
+	DefaultTemplateName string `json:"defaultTemplateName"`
 }
 
 // Only support rolling update now
