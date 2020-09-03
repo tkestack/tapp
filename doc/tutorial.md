@@ -65,6 +65,14 @@ type TAppSpec struct {
 	// Default values is false.
 	ForceDeletePod bool `json:"forceDeletePod,omitempty"`
 
+	// AutoDeleteUnusedTemplate indicates whether auto delete templates when it is unused.
+	// Default values is false.
+	AutoDeleteUnusedTemplate bool `json:"autoDeleteUnusedTemplate,omitempty"`
+
+	// NeverMigrate indicates whether to migrate pods. If it is true, pods will never be migrated to
+	// other nodes, otherwise it depends on other conditions(e.g. pod restart policy).
+	NeverMigrate bool `json:"neverMigrate,omitempty"`
+
 	// volumeClaimTemplates is a list of claims that pods are allowed to reference.
 	// The StatefulSet controller is responsible for mapping network identities to
 	// claims in a way that maintains the identity of a pod. Every claim in
@@ -73,6 +81,17 @@ type TAppSpec struct {
 	// any volumes in the template, with the same name.
 	// TODO: Define the behavior if a claim already exists with the same name.
 	VolumeClaimTemplates []corev1.PersistentVolumeClaim `json:"volumeClaimTemplates,omitempty"`
+
+	
+	// ServiceName is the name of the service that governs this TApp.
+	// This service must exist before the TApp, and is responsible for
+	// the network identity of the set. Pods get DNS/hostnames that follow the
+	// pattern: pod-specific-string.serviceName.default.svc.cluster.local
+	// where "pod-specific-string" is managed by the TApp controller.
+	ServiceName string `json:"serviceName,omitempty"`
+
+	//DefaultTemplateName is the default template name for scale
+	DefaultTemplateName string `json:"defaultTemplateName"`
 }
 
 // Only support rolling update now
@@ -129,7 +148,8 @@ type TAppStatus struct {
 
 * Create app with different templates
 
-  Firstly, create template in`spec.templatPools`, then speicify the template pod will use in `spec.templates`, e.g. `"1":"test"` means creating pod 1 using template `test`, use default template in `spec.template`  if not specified.
+Firstly, create template in`spec.templatPools`, then speicify the template pod will use in `spec.templates`, e.g. `"1":"test"` means creating pod 1 using template `test`, use default template if not specified. You can set the default template in `spec.templatPools` with `spec.DefaultTemplateName` , otherwise  default template will be in `spec.template`
+
 
   ```yaml
   $ cat tapp.yaml
@@ -158,6 +178,7 @@ type TAppStatus struct {
             image: nginx:1.7.9
     templates:
       "1": "test"
+    defaultTemplateName: "test"
   ```
 
 ### 2.2 Get tapp
@@ -213,7 +234,7 @@ Tapp controller will do **in-place update** for pod if only containers' images a
 
 * Rolling update
 
-  Create a new template in `spec.templatePool` and specify template to pod using `spec.templates`, or update existing template in `spec.templatePool`. And use `Spec.UpdateStrategy.Template` to specify the rolling update template, add `Spec.UpdateStrategy.MaxUnavailable` to specify max unavailable pods(default: 1).
+  Create a new template in `spec.templatePool` and specify template to pod using `spec.templates`, or update existing template in `spec.templatePool`. And use `Spec.UpdateStrategy.Template` to specify the rolling update template, add `Spec.UpdateStrategy.MaxUnavailable` to specify max unavailable pods(default: 1). The `Spec.UpdateStrategy.MaxUnavailable` can be a number like 1 or a percentage string like "50%".
 
   ```yaml
   $ # edit tapp.yaml, update pod 1 to use template test2.
@@ -291,7 +312,7 @@ If you want to run pod 1 again, just delete `spec.status`.
 
 ### 2.5 Scale up tapp
 
-If you want to scale up tapp use default template `spec.template`, just increased value of `spec.replicas`, otherwise you'll need specify which template pods will use in `spec.templates`. And `kubectl scale` also works for tapp.
+If you want to scale up tapp use default template just increased value of `spec.replicas`, otherwise you'll need specify which template pods will use in `spec.templates`. And `kubectl scale` also works for tapp. You can set the default template in "spec.templatPools" with "spec.DefaultTemplateName" , otherwise  default template will be in `spec.template`
 
 e.g.
 
@@ -305,6 +326,106 @@ $ kubectl scale --replicas=3 --resource-version='5892' tapp/nginx
 $ kubectl delete tapp XXX
 ```
 
-### 2.7 Others
+### 2.7 Get stable, unique network identifiers like statefulset
+
+Create a Headless Service and set `spec.serviceName` in TApp, then each pod will get a stable, matching DNS subdomain, taking the form: $(podname).$(namespace).svc.cluster.local,where "cluster.local" is the cluster domain.
+
+```yaml
+  $ cat tapp.yaml
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: nginx
+    labels:
+      app: example-tapp
+  spec:
+    ports:
+    - port: 80
+      name: web
+    clusterIP: None
+    selector:
+      app: example-tapp
+---
+  apiVersion: apps.tkestack.io/v1
+  kind: TApp
+  metadata:
+    name: example-tapp
+  spec:
+    replicas: 3
+    serviceName: "nginx"
+    template:
+      metadata:
+        labels:
+          app: example-tapp
+      spec:
+        containers:
+        - name: nginx
+          image: nginx:1.7.9
+
+### 2.8 Auto delete templates when it is unused
+
+If you want to delete unused templates in `spec.templatePool` to make the tapp concise, set `spec.autoDeleteUnusedTemplate` with true.
+e.g. in the follow yaml, template "test2" will be deleted while other template will be retained.
+The delete operation will be irreversible and make sure you will not use these template again.
+ 
+```yaml
+  $ cat tapp.yaml
+  apiVersion: apps.tkestack.io/v1
+  kind: TApp
+  metadata:
+    name: example-tapp
+  spec:
+    replicas: 3
+    autoDeleteUnusedTemplate: true
+    template:
+      metadata:
+        labels:
+          app: example-tapp
+      spec:
+        containers:
+        - name: nginx
+          image: nginx:1.7.9
+    templatePool:
+      "test1":
+        metadata:
+          labels:
+            app: example-tapp
+        spec:
+          containers:
+          - name: nginx
+            image: nginx:1.7.9
+      "test2":
+        metadata:
+          labels:
+            app: example-tapp
+        spec:
+          containers:
+          - name: nginx
+            image: nginx:1.7.8
+      "test3":
+        metadata:
+          labels:
+            app: example-tapp
+        spec:
+          containers:
+          - name: nginx
+            image: nginx:1.7.7
+      "test4":
+        metadata:
+          labels:
+            app: example-tapp
+        spec:
+          containers:
+          - name: nginx
+            image: nginx:1.7.7
+    templates:
+      "1": "test1"
+    updateStrategy:
+      template: "test3"
+      maxUnavailable: 1
+    DefaultTemplateName: "test4"
+  ```
+
+### 2.9 Others
 
 Tapp also supports other features, e.g. HPA, volume templates, they are simlimar to workloads in kubernetes.

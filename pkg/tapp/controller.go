@@ -501,6 +501,9 @@ func (c *Controller) removeUnusedTemplate(tapp *tappv1.TApp) error {
 	for k := range tapp.Spec.TemplatePool {
 		templateMap[k] = true
 	}
+	if tapp.Spec.DefaultTemplateName != tappv1.DefaultTemplateName {
+		delete(templateMap, tapp.Spec.DefaultTemplateName)
+	}
 	for _, template_used := range tapp.Spec.Templates {
 		delete(templateMap, template_used)
 	}
