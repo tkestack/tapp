@@ -28,7 +28,7 @@ COPY . ${WORKDIR}
 RUN make build
 
 
-FROM alpine:3.9
+FROM alpine:3.10
 
 RUN mkdir /etc/certs
 ADD build/docker/ca.crt /etc/certs
