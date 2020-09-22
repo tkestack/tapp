@@ -18,7 +18,7 @@ else
 fi
 
 cd $ROOT
-go build -o bin/tapp-controller -ldflags "$(api::version::ldflags)" .
+CGO_ENABLED=0 go build -o bin/tapp-controller -ldflags "$(api::version::ldflags)" .
 if [ $? -eq 0 ]; then
   echo "Build success!"
 else
