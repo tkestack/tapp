@@ -55,7 +55,7 @@ type TAppSpec struct {
 	// Replicas is the desired number of replicas of the given Template.
 	// These are replicas in the sense that they are instantiations of the
 	// same Template, but individual replicas also have a consistent identity.
-	Replicas int32 `json:"replicas,omitempty"`
+	Replicas int32 `json:"replicas"`
 
 	// Selector is a label query over pods that should match the replica count.
 	// If empty, defaulted to labels on the pod template.
