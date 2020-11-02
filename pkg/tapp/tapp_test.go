@@ -155,6 +155,67 @@ func TestUpdateInstance(t *testing.T) {
 	checkInstances("TestUpdateInstance3_2", tapp, oldCreate+1, oldDelete+1, 0, oldUpdate, client, t)
 }
 
+func TestForceUpdateStrategy(t *testing.T) {
+	tests := []struct {
+		name                string
+		forceUpdate         intstr.IntOrString
+		expectedForceUpdate int
+	}{
+		{
+			name:                "TestForceUpdateStrategy1",
+			forceUpdate:         intstr.FromInt(1),
+			expectedForceUpdate: 1,
+		},
+		{
+			name:                "TestForceUpdateStrategy1",
+			forceUpdate:         intstr.FromInt(5),
+			expectedForceUpdate: 5,
+		},
+		{
+			name:                "TestForceUpdateStrategy1",
+			forceUpdate:         intstr.FromInt(20),
+			expectedForceUpdate: 10, // because the number of forced pods is 10
+		},
+		{
+			name:                "TestForceUpdateStrategy1",
+			forceUpdate:         intstr.FromString("10%"),
+			expectedForceUpdate: 1,
+		},
+		{
+			name:                "TestForceUpdateStrategy1",
+			forceUpdate:         intstr.FromString("50%"),
+			expectedForceUpdate: 5,
+		},
+		{
+			name:                "TestForceUpdateStrategy1",
+			forceUpdate:         intstr.FromString("100%"),
+			expectedForceUpdate: 10, // because the number of forced pods is 10
+		},
+	}
+
+	for _, test := range tests {
+		controller, client := newFakeTAppController()
+		tapp := testutil.CreateValidTApp(10)
+		syncTApp(t, tapp, controller, client)
+		template := testutil.CreateValidPodTemplate()
+		image := template.Spec.Containers[0].Image
+		template.Spec.Containers[0].Image = image + "update"
+		template0 := "template0"
+		if err := testutil.AddPodTemplate(tapp, template0, template); err != nil {
+			t.Errorf("add pod template failed: %v", err)
+		}
+		for i := 0; i < 10; i++ {
+			testutil.UpdateInstanceTemplate(tapp, strconv.Itoa(i), template0)
+		}
+		tapp.Spec.UpdateStrategy.ForceUpdate.MaxUnavailable = &test.forceUpdate
+		oldCreate := client.InstancesCreated
+		oldDelete := client.InstancesDeleted
+		oldUpdate := client.InstancesUpdated
+		syncTApp(t, tapp, controller, client)
+		checkInstances(test.name, tapp, oldCreate, oldDelete, 0, oldUpdate+test.expectedForceUpdate, client, t)
+	}
+}
+
 func TestInstanceFailed(t *testing.T) {
 	onFail := func() *corev1.PodTemplateSpec {
 		template := testutil.CreateValidPodTemplate()
