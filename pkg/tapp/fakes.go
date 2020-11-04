@@ -19,6 +19,7 @@ package tapp
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -48,10 +49,13 @@ type fakeInstanceClient struct {
 	InstancesCreated, InstancesDeleted, InstanceForceDeleted, InstancesUpdated int
 	recorder                                                                   record.EventRecorder
 	InstanceHealthChecker
+	sync.Mutex
 }
 
 // Delete fakes Instance client deletion.
 func (f *fakeInstanceClient) Delete(p *Instance, options *metav1.DeleteOptions) error {
+	f.Lock()
+	defer f.Unlock()
 	if _, ok := f.Instances[p.id]; ok {
 		delete(f.Instances, p.id)
 		f.recorder.Eventf(p.parent, corev1.EventTypeNormal, "SuccessfulDelete", "Instance: %v", p.pod.Name)
@@ -68,6 +72,8 @@ func (f *fakeInstanceClient) Delete(p *Instance, options *metav1.DeleteOptions) 
 
 // Get fakes getting Instances.
 func (f *fakeInstanceClient) Get(p *Instance) (*Instance, bool, error) {
+	f.Lock()
+	defer f.Unlock()
 	if instance, ok := f.Instances[p.id]; ok {
 		return instance, true, nil
 	}
@@ -76,10 +82,19 @@ func (f *fakeInstanceClient) Get(p *Instance) (*Instance, bool, error) {
 
 // Create fakes Instance creation.
 func (f *fakeInstanceClient) Create(p *Instance) error {
+	f.Lock()
+	defer f.Unlock()
 	if _, ok := f.Instances[p.id]; ok {
 		return fmt.Errorf("failedl to create: instance %v already exists", p.id)
 	}
 	f.recorder.Eventf(p.parent, corev1.EventTypeNormal, "SuccessfulCreate", "Instance: %v", p.pod.Name)
+	pod := p.pod
+	pod.Status.Phase = corev1.PodRunning
+	pod.Status.Conditions = make([]corev1.PodCondition, 1)
+	pod.Status.Conditions[0] = corev1.PodCondition{
+		Type:   corev1.PodReady,
+		Status: corev1.ConditionTrue,
+	}
 	f.Instances[p.id] = p
 	f.InstancesCreated++
 	return nil
@@ -87,6 +102,8 @@ func (f *fakeInstanceClient) Create(p *Instance) error {
 
 // Update fakes Instance updates.
 func (f *fakeInstanceClient) Update(expected, wanted *Instance) error {
+	f.Lock()
+	defer f.Unlock()
 	if _, ok := f.Instances[wanted.id]; !ok {
 		return fmt.Errorf("failed to update: Instance %v not found", wanted.id)
 	}
@@ -96,6 +113,8 @@ func (f *fakeInstanceClient) Update(expected, wanted *Instance) error {
 }
 
 func (f *fakeInstanceClient) getPodList() []*corev1.Pod {
+	f.Lock()
+	defer f.Unlock()
 	p := []*corev1.Pod{}
 	for i, Instance := range f.Instances {
 		if Instance.pod == nil {
@@ -108,6 +127,8 @@ func (f *fakeInstanceClient) getPodList() []*corev1.Pod {
 
 // Delete fakes Instance client deletion.
 func (f *fakeInstanceClient) DeleteInstance(id string) error {
+	f.Lock()
+	defer f.Unlock()
 	if _, ok := f.Instances[id]; ok {
 		delete(f.Instances, id)
 	} else {
@@ -117,6 +138,8 @@ func (f *fakeInstanceClient) DeleteInstance(id string) error {
 }
 
 func (f *fakeInstanceClient) setDeletionTimestamp(id string, t time.Time) error {
+	f.Lock()
+	defer f.Unlock()
 	if _, ok := f.Instances[id]; !ok {
 		return fmt.Errorf("instance %v not found", id)
 	}
@@ -125,6 +148,8 @@ func (f *fakeInstanceClient) setDeletionTimestamp(id string, t time.Time) error 
 }
 
 func (f *fakeInstanceClient) setPodStatus(id string, status corev1.PodPhase) error {
+	f.Lock()
+	defer f.Unlock()
 	if _, ok := f.Instances[id]; !ok {
 		return fmt.Errorf("instance %v not found", id)
 	}
@@ -133,6 +158,8 @@ func (f *fakeInstanceClient) setPodStatus(id string, status corev1.PodPhase) err
 }
 
 func (f *fakeInstanceClient) setPodReason(id string, reason string) error {
+	f.Lock()
+	defer f.Unlock()
 	if _, ok := f.Instances[id]; !ok {
 		return fmt.Errorf("instance %v not found", id)
 	}

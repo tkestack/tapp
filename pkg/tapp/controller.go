@@ -488,6 +488,10 @@ func (c *Controller) setDefaultValue(tapp *tappv1.TApp) {
 		maxUnavailable := intstr.FromInt(tappv1.DefaultMaxUnavailable)
 		tapp.Spec.UpdateStrategy.MaxUnavailable = &maxUnavailable
 	}
+	if tapp.Spec.UpdateStrategy.ForceUpdate.MaxUnavailable == nil {
+		maxUnavailable := intstr.FromString(tappv1.DefaultMaxUnavailableForceUpdate)
+		tapp.Spec.UpdateStrategy.ForceUpdate.MaxUnavailable = &maxUnavailable
+	}
 }
 
 func (c *Controller) removeUnusedTemplate(tapp *tappv1.TApp) error {
@@ -784,7 +788,7 @@ func (c *Controller) transformPodActions(tapp *tappv1.TApp, podActions map[strin
 	desiredRunningPods sets.String) (add, del, forceDel, update []*Instance) {
 	var rollingUpdateIds []string
 	availablePods := getAvailablePods(podMap, desiredRunningPods)
-	// Delete pods
+
 	for p, a := range podActions {
 		pod := podMap[p]
 		switch a {
@@ -799,14 +803,34 @@ func (c *Controller) transformPodActions(tapp *tappv1.TApp, podActions map[strin
 				del = append(del, ins)
 			}
 			availablePods.Delete(p)
-			break
 		case createPod:
 			if instance, err := newInstance(tapp, p); err == nil {
 				add = append(add, instance)
 			}
-			break
+		}
+	}
+
+	maxUnavailableForceUpdate := intstr.FromString(tappv1.DefaultMaxUnavailableForceUpdate)
+	if tapp.Spec.UpdateStrategy.ForceUpdate.MaxUnavailable != nil {
+		maxUnavailableForceUpdate = *tapp.Spec.UpdateStrategy.ForceUpdate.MaxUnavailable
+	}
+	v, err := intstr.GetValueFromIntOrPercent(&maxUnavailableForceUpdate, desiredRunningPods.Len(), true)
+	if err != nil {
+		klog.Errorf("invalid value for MaxUnavailable: %v", err)
+		return
+	}
+	minAvailablePods := desiredRunningPods.Len() - v
+
+	for p, a := range podActions {
+		pod := podMap[p]
+		switch a {
 		case updatePod:
 			if !isInRollingUpdate(tapp, p) {
+				if len(availablePods) <= minAvailablePods {
+					klog.V(3).Infof("Skip %v pod %v because available pods are not enough: %v(current) vs %v(min)",
+						a, getPodFullName(pod), len(availablePods), minAvailablePods)
+					break
+				}
 				if instance, err := newInstance(tapp, p); err == nil {
 					update = append(update, instance)
 					availablePods.Delete(p)
@@ -814,9 +838,13 @@ func (c *Controller) transformPodActions(tapp *tappv1.TApp, podActions map[strin
 			} else {
 				rollingUpdateIds = append(rollingUpdateIds, p)
 			}
-			break
 		case recreatePod:
 			if !isInRollingUpdate(tapp, p) {
+				if len(availablePods) <= minAvailablePods {
+					klog.V(3).Infof("Skip %v pod %v because available pods are not enough: %v(current) vs %v(min)",
+						a, getPodFullName(pod), len(availablePods), minAvailablePods)
+					break
+				}
 				if instance, err := newInstanceWithPod(tapp, pod); err == nil {
 					del = append(del, instance)
 					availablePods.Delete(p)
@@ -824,9 +852,6 @@ func (c *Controller) transformPodActions(tapp *tappv1.TApp, podActions map[strin
 			} else {
 				rollingUpdateIds = append(rollingUpdateIds, p)
 			}
-			break
-		default:
-			klog.Errorf("Unknown pod action %v for pod %v", a, getPodFullName(pod))
 		}
 	}
 
@@ -839,7 +864,7 @@ func (c *Controller) transformPodActions(tapp *tappv1.TApp, podActions map[strin
 			return
 		}
 	}
-	minAvailablePods := desiredRunningPods.Len() - maxUnavailable
+	minAvailablePods = desiredRunningPods.Len() - maxUnavailable
 
 	// First sort ids.
 	sort.Slice(rollingUpdateIds, func(i, j int) bool {
@@ -862,15 +887,11 @@ func (c *Controller) transformPodActions(tapp *tappv1.TApp, podActions map[strin
 				update = append(update, instance)
 				availablePods.Delete(p)
 			}
-			break
 		case recreatePod:
 			if instance, err := newInstanceWithPod(tapp, pod); err == nil {
 				del = append(del, instance)
 				availablePods.Delete(p)
 			}
-			break
-		default:
-			klog.Errorf("Unknown pod action %v for pod %v", action, getPodFullName(pod))
 		}
 	}
 

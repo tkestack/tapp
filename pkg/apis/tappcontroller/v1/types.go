@@ -32,6 +32,9 @@ const (
 
 	// DefaultMaxUnavailable is the default value for .Spec.UpdateStrategy.MaxUnavailable
 	DefaultMaxUnavailable = 1
+
+	// DefaultMaxUnavailable is the default value for .Spec.UpdateStrategy.ForceUpdateStrategy.MaxUnavailable
+	DefaultMaxUnavailableForceUpdate = "100%"
 )
 
 // +genclient
@@ -75,7 +78,7 @@ type TAppSpec struct {
 	// Templates stores instanceID --> template name
 	Templates map[string]string `json:"templates,omitempty"`
 
-	// UpdateStrategy indicates the StatefulSetUpdateStrategy that will be
+	// UpdateStrategy indicates the TappUpdateStrategy that will be
 	// employed to update Pods in the TApp
 	UpdateStrategy TAppUpdateStrategy `json:"updateStrategy,omitempty"`
 
@@ -111,11 +114,20 @@ type TAppSpec struct {
 	DefaultTemplateName string `json:"defaultTemplateName"`
 }
 
-// Only support rolling update now
+// TApp update strategy
 type TAppUpdateStrategy struct {
+	// Following fields are rolling update related configuration.
 	// Template is the rolling update template name
 	Template string `json:"template,omitempty"`
 	// MaxUnavailable is the max unavailable number when tapp is rolling update, default is 1.
+	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
+
+	// Following fields are force update related configuration.
+	ForceUpdate ForceUpdateStrategy `json:"forceUpdate,omitempty"`
+}
+
+type ForceUpdateStrategy struct {
+	// MaxUnavailable is the max unavailable number when tapp is forced update, default is 100%.
 	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
 }
 
