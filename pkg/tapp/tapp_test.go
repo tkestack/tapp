@@ -290,30 +290,6 @@ func TestInstanceDeleted(t *testing.T) {
 	checkInstances("TestInstanceDeleted2", tapp, oldCreate+1, oldDelete, 0, oldUpdate, client, t)
 }
 
-func TestInstanceForceDeleted(t *testing.T) {
-	controller, client := newFakeTAppController()
-	tapp := testutil.CreateValidTApp(2)
-	syncTApp(t, tapp, controller, client)
-	checkInstances("TestTestInstanceForceDeleted1", tapp, int(tapp.Spec.Replicas), 0, 0, 0, client, t)
-
-	timeout := 5 * time.Minute
-	client.setDeletionTimestamp("0", time.Now().Add(-timeout-1))
-	oldCreate, oldDelete, oldForceDelete, oldUpdate := client.InstancesCreated, client.InstancesDeleted, client.InstanceForceDeleted, client.InstancesUpdated
-	syncTApp(t, tapp, controller, client)
-	checkInstances("TestInstanceDeleted2", tapp, oldCreate, oldDelete, oldForceDelete, oldUpdate, client, t)
-
-	bak := tapp.Spec.ForceDeletePod
-	tapp.Spec.ForceDeletePod = true
-	client.setPodReason("0", NodeUnreachablePodReason)
-	oldForceDelete = client.InstanceForceDeleted
-	syncTApp(t, tapp, controller, client)
-	checkInstances("TestInstanceDeleted3", tapp, oldCreate, oldDelete, oldForceDelete+1, oldUpdate, client, t)
-	if client.InstanceForceDeleted != oldForceDelete+1 {
-		t.Errorf("TestInstanceDeleted3: need force delete a pod")
-	}
-	tapp.Spec.ForceDeletePod = bak
-}
-
 func TestRampUp(t *testing.T) {
 	controller, client := newFakeTAppController()
 	tapp := testutil.CreateValidTApp(2)
