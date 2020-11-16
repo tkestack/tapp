@@ -905,10 +905,18 @@ func isInRollingUpdate(tapp *tappv1.TApp, podId string) bool {
 }
 
 func (c *Controller) needForceDelete(tapp *tappv1.TApp, pod *corev1.Pod) bool {
-	if pod == nil {
-		return false
+	if pod != nil && isPodDying(pod) && tapp.Spec.ForceDeletePod && len(pod.Spec.NodeName) != 0 {
+		node, err := c.kubeclient.CoreV1().Nodes().Get(pod.Spec.NodeName, metav1.GetOptions{})
+		if err != nil {
+			return errors.IsNotFound(err)
+		}
+		for _, c := range node.Status.Conditions {
+			if c.Type == corev1.NodeReady {
+				return c.Status == corev1.ConditionTrue || c.Status == corev1.ConditionUnknown
+			}
+		}
 	}
-	return isPodDying(pod) && pod.Status.Reason == NodeUnreachablePodReason && tapp.Spec.ForceDeletePod
+	return false
 }
 
 func (c *Controller) isTemplateHashChanged(tapp *tappv1.TApp, podId string, pod *corev1.Pod) bool {

@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
-	"time"
 
 	tappv1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
 	"tkestack.io/tapp/pkg/client/clientset/versioned/fake"
@@ -153,33 +152,6 @@ func TestShouldPodMigrate(t *testing.T) {
 	v, err = shouldPodMigrate(&tapp, &pod, "0")
 	if err != nil || v != false {
 		t.Errorf("TestShouldPodMigrate failed for pod that no containers have run")
-	}
-}
-
-func TestNeedForceDelete(t *testing.T) {
-
-	cases := []struct {
-		Name           string
-		ForceDeletePod bool
-		Reason         string
-		ExpectedDelete bool
-	}{
-		{Name: "TestNeedForceDelete1", ForceDeletePod: true, Reason: "Unkown", ExpectedDelete: false},
-		{Name: "TestNeedForceDelete2", ForceDeletePod: true, Reason: NodeUnreachablePodReason, ExpectedDelete: true},
-		{Name: "TestNeedForceDelete3", ForceDeletePod: false, Reason: "Unkown", ExpectedDelete: false},
-		{Name: "TestNeedForceDelete4", ForceDeletePod: false, Reason: NodeUnreachablePodReason, ExpectedDelete: false},
-	}
-	var pod corev1.Pod
-	var tapp tappv1.TApp
-	for _, test := range cases {
-		c := Controller{}
-		pod.Status.Reason = test.Reason
-		pod.DeletionTimestamp = &metav1.Time{Time: time.Now()}
-		tapp.Spec.ForceDeletePod = test.ForceDeletePod
-		v := c.needForceDelete(&tapp, &pod)
-		if v != test.ExpectedDelete {
-			t.Errorf("%s failed, expected %t, got %t", test.Name, test.ExpectedDelete, v)
-		}
 	}
 }
 
