@@ -1,4 +1,4 @@
-apiVersion: apps.tkestack.io/v1
+apiVersion: tke.cloud.tencent.com/v1
 kind: TApp
 metadata:
   name: example-tapp

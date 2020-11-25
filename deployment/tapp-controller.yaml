@@ -43,7 +43,26 @@ spec:
             - "--v=3"
             - "--register-admission=true"
           imagePullPolicy: "Always"
+          ports:
+          - containerPort: 8443
+            protocol: "TCP"
+            name: "https"
           resources:
             requests:
-              "cpu": "1"
+              "cpu": "100m"
               "memory": "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tapp-controller
+  namespace: kube-system
+spec:
+  ports:
+  - port: 443
+    protocol: TCP
+    name: https
+    targetPort: https
+  selector:
+    app: tapp-controller
+  type: ClusterIP
