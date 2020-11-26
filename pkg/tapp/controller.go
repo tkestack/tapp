@@ -912,7 +912,7 @@ func (c *Controller) needForceDelete(tapp *tappv1.TApp, pod *corev1.Pod) bool {
 		}
 		for _, c := range node.Status.Conditions {
 			if c.Type == corev1.NodeReady {
-				return c.Status == corev1.ConditionTrue || c.Status == corev1.ConditionUnknown
+				return c.Status == corev1.ConditionFalse || c.Status == corev1.ConditionUnknown
 			}
 		}
 	}
