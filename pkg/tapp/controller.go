@@ -1189,6 +1189,9 @@ func setInPlaceUpdateCondition(kubeclient kubernetes.Interface, pod *corev1.Pod,
 			return
 		}
 
+		reason := "ReadinessGatesNotReady"
+		message := fmt.Sprintf("the status of pod readiness gate %q is not \"True\", but %v",
+			string(tappv1.InPlaceUpdateReady), corev1.ConditionFalse)
 		// If status is False, we also need to update Ready condition to False immediately
 		if status == corev1.ConditionFalse {
 			for i, c := range pod.Status.Conditions {
@@ -1196,10 +1199,20 @@ func setInPlaceUpdateCondition(kubeclient kubernetes.Interface, pod *corev1.Pod,
 					if c.Status != corev1.ConditionFalse {
 						pod.Status.Conditions[i].Status = corev1.ConditionFalse
 						pod.Status.Conditions[i].LastTransitionTime = metav1.Now()
-						pod.Status.Conditions[i].Reason = "ReadinessGatesNotReady"
-						pod.Status.Conditions[i].Message =
-							fmt.Sprintf("the status of pod readiness gate %q is not \"True\", but %v",
-								string(tappv1.InPlaceUpdateReady), corev1.ConditionFalse)
+						pod.Status.Conditions[i].Reason = reason
+						pod.Status.Conditions[i].Message = message
+					}
+					break
+				}
+			}
+		} else {
+			for i, c := range pod.Status.Conditions {
+				if c.Type == corev1.PodReady {
+					if c.Status == corev1.ConditionFalse && c.Reason == reason && c.Message == message {
+						pod.Status.Conditions[i].Status = corev1.ConditionTrue
+						pod.Status.Conditions[i].LastTransitionTime = metav1.Now()
+						pod.Status.Conditions[i].Reason = ""
+						pod.Status.Conditions[i].Message = ""
 					}
 					break
 				}
