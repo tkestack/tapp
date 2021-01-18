@@ -308,7 +308,16 @@ func (c *Controller) getPodsForTApp(tapp *tappv1.TApp) ([]*corev1.Pod, error) {
 	result := make([]*corev1.Pod, 0, len(pods))
 	for i := range pods {
 		// TODO: does it impact performance?
-		result = append(result, pods[i].DeepCopy())
+		controllerRef := metav1.GetControllerOf(pods[i])
+		if controllerRef == nil {
+			continue
+		}
+		if controllerRef.UID == tapp.UID {
+			result = append(result, pods[i].DeepCopy())
+		} else {
+			klog.V(4).Infof("pod %s in namespace %s matches the selector of tapp %s, but has different controllerRef",
+				pods[i].Name, pods[i].Namespace, util.GetTAppFullName(tapp))
+		}
 	}
 	return result, nil
 }
