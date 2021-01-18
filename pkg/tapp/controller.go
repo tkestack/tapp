@@ -18,6 +18,7 @@
 package tapp
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -831,7 +832,7 @@ func (c *Controller) transformPodActions(tapp *tappv1.TApp, podActions map[strin
 						a, getPodFullName(pod), len(availablePods), minAvailablePods)
 					break
 				}
-				if instance, err := newInstance(tapp, p); err == nil {
+				if instance, err := newInstanceWithOldStatus(tapp, p, pod); err == nil {
 					update = append(update, instance)
 					availablePods.Delete(p)
 				}
@@ -883,7 +884,7 @@ func (c *Controller) transformPodActions(tapp *tappv1.TApp, podActions map[strin
 		}
 		switch action {
 		case updatePod:
-			if instance, err := newInstance(tapp, p); err == nil {
+			if instance, err := newInstanceWithOldStatus(tapp, p, pod); err == nil {
 				update = append(update, instance)
 				availablePods.Delete(p)
 			}
@@ -1241,6 +1242,17 @@ func setInPlaceUpdateCondition(kubeclient kubernetes.Interface, pod *corev1.Pod,
 
 // isUpdating returns true if kubelet is updating image for pod, otherwise returns false
 func isUpdating(pod *corev1.Pod) bool {
+	inPlaceUpdateState := InPlaceUpdateState{}
+	if stateStr, ok := pod.Annotations[InPlaceUpdateStateKey]; !ok {
+		inPlaceUpdateState = InPlaceUpdateState{
+			LastContainerStatuses: make(map[string]InPlaceUpdateContainerStatus),
+		}
+	} else if err := json.Unmarshal([]byte(stateStr), &inPlaceUpdateState); err != nil {
+		klog.Warningf("Failed to unmarshal inPlaceUpdateState for  pod %s/%s",
+			pod.Namespace, pod.Name)
+		//in this case, the pod is in updating?
+		return true
+	}
 	isSameImage := func(expected, real string) bool {
 		return expected == real || "docker.io/"+expected == real ||
 			"docker.io/"+expected+":latest" == real || expected+":latest" == real
@@ -1253,12 +1265,25 @@ func isUpdating(pod *corev1.Pod) bool {
 		if expectedImage, found := expectedContainerImage[status.Name]; !found {
 			klog.Warningf("Failed to find expected image for container %s in pod %s/%s",
 				status.Name, pod.Namespace, pod.Name)
-		} else if !isSameImage(expectedImage, status.Image) || len(status.ImageID) == 0 {
+		} else if len(status.ImageID) == 0 {
 			// status.ImageID == "" means pulling image now
 			klog.V(5).Infof("Pod %s/%s is updating: %v(expected) vs %v(got), imageId: %v",
 				pod.Namespace, pod.Name, expectedImage, status.Image, status.ImageID)
 			return true
+		} else if oldStatus, ok := inPlaceUpdateState.LastContainerStatuses[status.Name]; ok {
+			// oldStatus means this  Container should be changed in updating, then we check the ImageID and Image tag.
+			// if the new ImageID is same as the old and the image tag is different from the expect, the pod is updating
+			if oldStatus.ImageID == status.ImageID && !isSameImage(expectedImage, status.Image) {
+				klog.V(5).Infof("Pod %s/%s is updating: %v(expected) vs %v(got), imageId: %v",
+					pod.Namespace, pod.Name, expectedImage, status.Image, status.ImageID)
+				return true
+			}
+			delete(inPlaceUpdateState.LastContainerStatuses, status.Name)
 		}
+	}
+	if len(inPlaceUpdateState.LastContainerStatuses) > 0 {
+		klog.V(5).Infof("not found new statuses of some old containers %v", inPlaceUpdateState.LastContainerStatuses)
+		return true
 	}
 
 	return false

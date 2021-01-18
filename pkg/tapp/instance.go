@@ -103,6 +103,33 @@ func newInstance(tapp *tappv1.TApp, id string) (*Instance, error) {
 	return ins, nil
 }
 
+func newInstanceWithOldStatus(tapp *tappv1.TApp, id string, oldPod *corev1.Pod) (*Instance, error) {
+	template, err := getPodTemplate(&tapp.Spec, id)
+	if err != nil {
+		klog.Errorf("Failed to newInstance %s-%s: %v", util.GetTAppFullName(tapp), id, err)
+		return nil, err
+	}
+
+	pod, err := util.GetPodFromTemplate(template, tapp, getControllerRef(tapp))
+	if err != nil {
+		klog.Errorf("Failed to newInstance %s-%s: %v", util.GetTAppFullName(tapp), id, err)
+		return nil, err
+	}
+	err = getInPlaceUpdateStateJson(pod, oldPod)
+	if err != nil {
+		klog.Errorf("Skip update pod %v because can not encode old container statuses info:%v", getPodFullName(oldPod), err)
+		return nil, err
+	}
+	for _, im := range newIdentityMappers(tapp) {
+		im.SetIdentity(id, pod)
+	}
+
+	ins := &Instance{pod, id, tapp}
+	updateStorage(ins)
+
+	return ins, nil
+}
+
 func getControllerRef(tapp *tappv1.TApp) *metav1.OwnerReference {
 	trueVar := true
 	return &metav1.OwnerReference{
