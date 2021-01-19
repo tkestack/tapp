@@ -74,6 +74,7 @@ const (
 
 var (
 	deletePodAfterAppFinish = false
+	controllerKind          = tappv1.SchemeGroupVersion.WithKind("TApp")
 )
 
 // Controller is the controller implementation for TApp resources
@@ -241,7 +242,24 @@ func (c *Controller) runWorker() {
 // addPod adds the tapp for the pod to the sync workqueue
 func (c *Controller) addPod(obj interface{}) {
 	pod := obj.(*corev1.Pod)
-	klog.V(8).Infof("Pod %s created, labels: %+v", pod.Name, pod.Labels)
+	if pod.DeletionTimestamp != nil {
+		// on a restart of the controller, it's possible a new pod shows up in a state that
+		// is already pending deletion. Prevent the pod from being a creation observation.
+		c.deletePod(pod)
+		return
+	}
+
+	// If it has a ControllerRef, that's all that matters.
+	if controllerRef := metav1.GetControllerOf(pod); controllerRef != nil {
+		if tapp, err := c.resolveControllerRef(pod.Namespace, controllerRef); err == nil {
+			klog.V(8).Infof("Pod %s created, labels: %+v", pod.Name, pod.Labels)
+			c.enqueueTApp(tapp)
+			return
+		}
+		return
+	}
+
+	klog.V(8).Infof("Orphan Pod %s created, labels: %+v", pod.Name, pod.Labels)
 	if tapp, err := c.getTAppForPod(pod); err == nil {
 		c.enqueueTApp(tapp)
 	}
@@ -257,12 +275,35 @@ func (c *Controller) updatePod(old, cur interface{}) {
 		// Two different versions of the same pod will always have different RVs.
 		return
 	}
-	if tapp, err := c.getTAppForPod(curPod); err == nil {
-		c.enqueueTApp(tapp)
+
+	labelChanged := !reflect.DeepEqual(curPod.Labels, oldPod.Labels)
+
+	curControllerRef := metav1.GetControllerOf(curPod)
+	oldControllerRef := metav1.GetControllerOf(oldPod)
+	controllerRefChanged := !reflect.DeepEqual(curControllerRef, oldControllerRef)
+	if controllerRefChanged && oldControllerRef != nil {
+		// The ControllerRef was changed. Sync the old controller, if any.
+		if tapp, err := c.resolveControllerRef(oldPod.Namespace, oldControllerRef); err == nil {
+			c.enqueueTApp(tapp)
+		}
 	}
-	if !reflect.DeepEqual(curPod.Labels, oldPod.Labels) {
-		if oldTapp, err := c.getTAppForPod(oldPod); err == nil {
-			c.enqueueTApp(oldTapp)
+
+	// If it has a ControllerRef, that's all that matters.
+	if curControllerRef != nil {
+		if tapp, err := c.resolveControllerRef(curPod.Namespace, curControllerRef); err == nil {
+			klog.V(8).Infof("Pod %s updated, objectMeta %+v -> %+v.", curPod.Name, oldPod.ObjectMeta, curPod.ObjectMeta)
+			c.enqueueTApp(tapp)
+			return
+		}
+		return
+	}
+
+	// Otherwise, it's an orphan. If anything changed, sync matching controllers
+	// to see if anyone wants to adopt it now.
+	if labelChanged || controllerRefChanged {
+		if tapp, err := c.getTAppForPod(curPod); err == nil {
+			klog.V(8).Infof("Orphan Pod %s updated, objectMeta %+v -> %+v.", curPod.Name, oldPod.ObjectMeta, curPod.ObjectMeta)
+			c.enqueueTApp(tapp)
 		}
 	}
 }
@@ -287,11 +328,15 @@ func (c *Controller) deletePod(obj interface{}) {
 			return
 		}
 	}
-	klog.V(8).Infof("Pod %s/%s deleted.", pod.Namespace, pod.Name)
-	if tapp, err := c.getTAppForPod(pod); err == nil {
+
+	controllerRef := metav1.GetControllerOf(pod)
+	if controllerRef == nil {
+		// No controller should care about orphans being deleted.
+		return
+	}
+	if tapp, err := c.resolveControllerRef(pod.Namespace, controllerRef); err == nil {
+		klog.V(8).Infof("Pod %s/%s deleted.", pod.Namespace, pod.Name)
 		c.enqueueTApp(tapp)
-	} else {
-		klog.Errorf("Failed to get tapp for pod %s/%s", pod.Namespace, pod.Name)
 	}
 }
 
@@ -301,16 +346,30 @@ func (c *Controller) getPodsForTApp(tapp *tappv1.TApp) ([]*corev1.Pod, error) {
 	if err != nil {
 		return []*corev1.Pod{}, err
 	}
-	pods, err := c.podStore.Pods(tapp.Namespace).List(sel)
+	// List all pods to include those that don't match the selector anymore
+	// but have a ControllerRef pointing to this controller.
+	pods, err := c.podStore.Pods(tapp.Namespace).List(labels.Everything())
 	if err != nil {
 		return []*corev1.Pod{}, err
 	}
-	result := make([]*corev1.Pod, 0, len(pods))
-	for i := range pods {
-		// TODO: does it impact performance?
-		result = append(result, pods[i].DeepCopy())
-	}
-	return result, nil
+	// If any adoptions are attempted, we should first recheck for deletion
+	// with an uncached quorum read sometime after listing Pods (see #42639).
+	canAdoptFunc := RecheckDeletionTimestamp(func() (metav1.Object, error) {
+		fresh, err := c.tappclient.TappcontrollerV1().TApps(tapp.Namespace).Get(tapp.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		if fresh.UID != tapp.UID {
+			return nil, fmt.Errorf("original tapp %v/%v is gone: got uid %v, wanted %v", tapp.Namespace, tapp.Name, fresh.UID, tapp.UID)
+		}
+		return fresh, nil
+	})
+	cm := NewPodControllerRefManager(c.kubeclient, tapp, sel, controllerKind, canAdoptFunc)
+	//ClaimPods is an official function that  tries to take ownership of a list of Pods
+	//It will reconcile the following:
+	//   * Adopt orphans if the selector matches.
+	//   * Release owned objects if the selector no longer matches.
+	return cm.ClaimPods(pods)
 }
 
 // getTAppForPod returns the instance set managing the given pod.
@@ -350,6 +409,27 @@ func (c *Controller) getTAppForPod(pod *corev1.Pod) (*tappv1.TApp, error) {
 		sort.Sort(overlappingTApps(tapps))
 	}
 	return tapps[0], nil
+}
+
+// resolveControllerRef returns the controller referenced by a ControllerRef,
+// or nil if the ControllerRef could not be resolved to a matching controller
+// of the correct Kind.
+func (c *Controller) resolveControllerRef(namespace string, controllerRef *metav1.OwnerReference) (*tappv1.TApp, error) {
+	// We can't look up by UID, so look up by Name and then verify UID.
+	// Don't even try to look up by Name if it's the wrong Kind.
+	if controllerRef.Kind != controllerKind.Kind {
+		return nil, fmt.Errorf("no TApps found  because pods has controllerRef of kind %v", controllerRef.Kind)
+	}
+	tapp, err := c.tappLister.TApps(namespace).Get(controllerRef.Name)
+	if err != nil {
+		return nil, fmt.Errorf("cloud not find tapps for pod in namespace %s with controllerRef name: %v ", namespace, controllerRef.Name)
+	}
+	if tapp.UID != controllerRef.UID {
+		// The controller we found with this Name is not the same one that the
+		// ControllerRef points to.
+		return nil, fmt.Errorf("cloud not find tapps  for pod  in namespace %s with controllerRef uid : %v ", namespace, controllerRef.UID)
+	}
+	return tapp, nil
 }
 
 // enqueueTApp enqueues the given tapp in the work workqueue.
