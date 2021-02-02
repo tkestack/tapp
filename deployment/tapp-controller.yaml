@@ -35,10 +35,10 @@ spec:
       labels:
         app: tapp-controller
     spec:
-      serviceAccount: tapp-controller
+      serviceAccountName: tapp-controller
       containers:
         - name: tapp-controller
-          image: ccr.ccs.tencentyun.com/tke-public/tapp-controller:v1.0.0
+          image: tkestack/tapp-controller:v1.1.1
           args:
             - "--v=3"
             - "--register-admission=true"
