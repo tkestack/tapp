@@ -346,7 +346,7 @@ func TestIsUpdatingPods(t *testing.T) {
 				{
 					Name:    "containerB",
 					Image:   "2048",
-					ImageID: "123456",
+					ImageID: "12345",
 				},
 			},
 		},
@@ -407,14 +407,15 @@ func TestIsUpdatingPods(t *testing.T) {
 				{
 					Name:    "containerB",
 					Image:   "2048",
-					ImageID: "123456",
+					ImageID: "12345",
 				},
 			},
 		},
 	}
 	pod3 := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{tappv1.TAppInstanceKey: "3"},
+			Labels:      map[string]string{tappv1.TAppInstanceKey: "3"},
+			Annotations: map[string]string{InPlaceUpdateStateKey: InPlaceUpdateStateValue},
 		},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
@@ -433,7 +434,7 @@ func TestIsUpdatingPods(t *testing.T) {
 				{
 					Name:    "containerA",
 					Image:   "docker.io/nginx:1.7.9",
-					ImageID: "123456",
+					ImageID: "1234567",
 				},
 				{
 					Name:    "containerB",
@@ -443,8 +444,40 @@ func TestIsUpdatingPods(t *testing.T) {
 			},
 		},
 	}
-	pods := []*corev1.Pod{pod0, pod1, pod2, pod3}
-	expectedUpdating := map[string]bool{"1": true, "2": true}
+	pod4 := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels:      map[string]string{tappv1.TAppInstanceKey: "4"},
+			Annotations: map[string]string{InPlaceUpdateStateKey: InPlaceUpdateStateValue},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:  "containerA",
+					Image: "nginx:1.7.9",
+				},
+				{
+					Name:  "containerB",
+					Image: "2048",
+				},
+			},
+		},
+		Status: corev1.PodStatus{
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name:    "containerA",
+					Image:   "nginx",
+					ImageID: "1234567",
+				},
+				{
+					Name:    "containerB",
+					Image:   "2048:latest",
+					ImageID: "123456",
+				},
+			},
+		},
+	}
+	pods := []*corev1.Pod{pod0, pod1, pod2, pod3, pod4}
+	expectedUpdating := map[string]bool{"4": true}
 	updating := getUpdatingPods(pods)
 	if !reflect.DeepEqual(expectedUpdating, updating) {
 		t.Errorf("Failed to getUpdatingPods, expected: %+v, got: %+v", expectedUpdating, updating)

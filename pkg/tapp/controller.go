@@ -832,6 +832,7 @@ func (c *Controller) transformPodActions(tapp *tappv1.TApp, podActions map[strin
 					break
 				}
 				if instance, err := newInstance(tapp, p); err == nil {
+					setInPlaceUpdateAnnotation(instance)
 					update = append(update, instance)
 					availablePods.Delete(p)
 				}
@@ -884,6 +885,7 @@ func (c *Controller) transformPodActions(tapp *tappv1.TApp, podActions map[strin
 		switch action {
 		case updatePod:
 			if instance, err := newInstance(tapp, p); err == nil {
+				setInPlaceUpdateAnnotation(instance)
 				update = append(update, instance)
 				availablePods.Delete(p)
 			}
@@ -1241,6 +1243,9 @@ func setInPlaceUpdateCondition(kubeclient kubernetes.Interface, pod *corev1.Pod,
 
 // isUpdating returns true if kubelet is updating image for pod, otherwise returns false
 func isUpdating(pod *corev1.Pod) bool {
+	if stateStr, ok := pod.Annotations[InPlaceUpdateStateKey]; !ok || stateStr != InPlaceUpdateStateValue {
+		return false
+	}
 	isSameImage := func(expected, real string) bool {
 		return expected == real || "docker.io/"+expected == real ||
 			"docker.io/"+expected+":latest" == real || expected+":latest" == real
