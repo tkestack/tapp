@@ -418,13 +418,9 @@ func mergePod(current, excepted *corev1.Pod) {
 func (p *ApiServerInstanceClient) Update(current *Instance, expected *Instance) error {
 	pc := podClient(p.KubeClient, expected.parent.Namespace)
 
-	var err error
+	var err, e error
 	pod := current.pod
 	for i, cp := 0, current.pod; i <= updateRetries; i++ {
-		if cp, err = pc.Get(pod.Name, metav1.GetOptions{}); err != nil {
-			break
-		}
-
 		mergePod(cp, expected.pod)
 		klog.V(2).Infof("Updating pod %s, pod meta:%+v, pod spec:%+v", getPodFullName(cp), cp.ObjectMeta, cp.Spec)
 
@@ -433,6 +429,10 @@ func (p *ApiServerInstanceClient) Update(current *Instance, expected *Instance) 
 			break
 		}
 		klog.Errorf("Failed to update pod %s, will retry: %v", getPodFullName(cp), err)
+
+		if cp, e = pc.Get(pod.Name, metav1.GetOptions{}); e != nil {
+			break
+		}
 	}
 
 	p.event(current.parent, "Update", fmt.Sprintf("Instance: %v", current.pod.Name), err)
