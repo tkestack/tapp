@@ -82,7 +82,6 @@ type TAppSpec struct {
 	// TODO: Define the behavior if a claim already exists with the same name.
 	VolumeClaimTemplates []corev1.PersistentVolumeClaim `json:"volumeClaimTemplates,omitempty"`
 
-	
 	// ServiceName is the name of the service that governs this TApp.
 	// This service must exist before the TApp, and is responsible for
 	// the network identity of the set. Pods get DNS/hostnames that follow the
@@ -187,7 +186,7 @@ Firstly, create template in`spec.templatPools`, then speicify the template pod w
 $ kubectl descirbe tapp XXX
 ```
 
-or 
+or
 
 ```
 $ kubectl get tapp XXX
@@ -308,11 +307,11 @@ spec:
 $ kubect apply -f ./tapp.yaml
 ```
 
-If you want to run pod 1 again, just delete `spec.status`.
+If you want to run pod 1 again, just delete `spec.statuses`.
 
 ### 2.5 Scale up tapp
 
-If you want to scale up tapp use default template just increased value of `spec.replicas`, otherwise you'll need specify which template pods will use in `spec.templates`. And `kubectl scale` also works for tapp. You can set the default template in "spec.templatPools" with "spec.DefaultTemplateName" , otherwise  default template will be in `spec.template`
+If you want to scale up tapp use default template just increased value of `spec.replicas`, otherwise you'll need specify which template pods will use in `spec.templates`. And `kubectl scale` also works for tapp. You can set the default template in "spec.templatePool" with "spec.DefaultTemplateName" , otherwise  default template will be in `spec.template`
 
 e.g.
 
@@ -428,4 +427,4 @@ The delete operation will be irreversible and make sure you will not use these t
 
 ### 2.9 Others
 
-Tapp also supports other features, e.g. HPA, volume templates, they are simlimar to workloads in kubernetes.
+Tapp also supports other features, e.g. HPA, volume templates, they are similar to workloads in kubernetes.
