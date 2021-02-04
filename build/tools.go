@@ -19,4 +19,6 @@ limitations under the License.
 // This package imports things required by build scripts, to force `go mod` to see them as dependencies
 package build
 
-import _ "k8s.io/code-generator"
+import (
+	_ "k8s.io/code-generator"
+)
