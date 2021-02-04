@@ -53,7 +53,7 @@ type fakeInstanceClient struct {
 }
 
 // Delete fakes Instance client deletion.
-func (f *fakeInstanceClient) Delete(p *Instance, options *metav1.DeleteOptions) error {
+func (f *fakeInstanceClient) Delete(p *Instance, options metav1.DeleteOptions) error {
 	f.Lock()
 	defer f.Unlock()
 	if _, ok := f.Instances[p.id]; ok {
@@ -62,7 +62,7 @@ func (f *fakeInstanceClient) Delete(p *Instance, options *metav1.DeleteOptions) 
 	} else {
 		return fmt.Errorf("failed to delete: instance %v doesn't exist", p.id)
 	}
-	if options == nil || (options.GracePeriodSeconds != nil && *options.GracePeriodSeconds != 0) {
+	if (options.GracePeriodSeconds == nil) || (options.GracePeriodSeconds != nil && *options.GracePeriodSeconds != 0) {
 		f.InstancesDeleted++
 	} else {
 		f.InstanceForceDeleted++
