@@ -18,6 +18,7 @@
 package tapp
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"sort"
@@ -429,7 +430,7 @@ func (c *Controller) preprocessTApp(tapp *tappv1.TApp) error {
 		// TODO: it is a little tricky here, and it might brings unnecessary update.
 		// It will take effect on calculating the tapp hash.
 		// If container resource is 0.5 cpu, it will be updated to 500m after updating tapp because of serialization.
-		newTapp, err = c.tappclient.TappcontrollerV1().TApps(tapp.Namespace).Update(tapp)
+		newTapp, err = c.tappclient.TappcontrollerV1().TApps(tapp.Namespace).Update(context.TODO(), tapp, metav1.UpdateOptions{})
 		if err != nil {
 			return err
 		}
@@ -461,13 +462,13 @@ func (c *Controller) preprocessTApp(tapp *tappv1.TApp) error {
 	// Update tapp if needed
 	if !reflect.DeepEqual(newTapp.Spec, tapp.Spec) {
 		klog.V(4).Infof("Update tapp %s's spec: %+v => %+v", util.GetTAppFullName(tapp), tapp.Spec, newTapp.Spec)
-		if newTapp, err = c.tappclient.TappcontrollerV1().TApps(newTapp.Namespace).Update(newTapp); err != nil {
+		if newTapp, err = c.tappclient.TappcontrollerV1().TApps(newTapp.Namespace).Update(context.TODO(), newTapp, metav1.UpdateOptions{}); err != nil {
 			return err
 		}
 	}
 	if !reflect.DeepEqual(newTapp.Status, tapp.Status) {
 		klog.V(4).Infof("Update tapp %s's status: %+v => %+v", util.GetTAppFullName(tapp), tapp.Spec, newTapp.Spec)
-		if newTapp, err = c.tappclient.TappcontrollerV1().TApps(newTapp.Namespace).UpdateStatus(newTapp); err != nil {
+		if newTapp, err = c.tappclient.TappcontrollerV1().TApps(newTapp.Namespace).UpdateStatus(context.TODO(), newTapp, metav1.UpdateOptions{}); err != nil {
 			return err
 		}
 	}
@@ -906,7 +907,7 @@ func isInRollingUpdate(tapp *tappv1.TApp, podId string) bool {
 
 func (c *Controller) needForceDelete(tapp *tappv1.TApp, pod *corev1.Pod) bool {
 	if pod != nil && isPodDying(pod) && tapp.Spec.ForceDeletePod && len(pod.Spec.NodeName) != 0 {
-		node, err := c.kubeclient.CoreV1().Nodes().Get(pod.Spec.NodeName, metav1.GetOptions{})
+		node, err := c.kubeclient.CoreV1().Nodes().Get(context.TODO(), pod.Spec.NodeName, metav1.GetOptions{})
 		if err != nil {
 			return errors.IsNotFound(err)
 		}
@@ -1103,14 +1104,14 @@ func (c *Controller) updateTAppStatus(tapp *tappv1.TApp, pods []*corev1.Pod) err
 		app.Status.AppStatus = genAppStatus(app)
 		klog.V(3).Infof("Updating tapp %s's status: replicas:%+v, status:%+v, pods:%+v", util.GetTAppFullName(app),
 			app.Status.Replicas, app.Status.AppStatus, app.Status.Statuses)
-		_, updateErr = client.UpdateStatus(app)
+		_, updateErr = client.UpdateStatus(context.TODO(), app, metav1.UpdateOptions{})
 		if updateErr != nil {
 			klog.Errorf("Failed to update status for %s: %+v", app.Name, updateErr)
 		}
 		if updateErr == nil || i >= statusUpdateRetries {
 			return updateErr
 		}
-		if app, getErr = client.Get(app.Name, metav1.GetOptions{}); getErr != nil {
+		if app, getErr = client.Get(context.TODO(), app.Name, metav1.GetOptions{}); getErr != nil {
 			return getErr
 		}
 	}
@@ -1221,9 +1222,9 @@ func setInPlaceUpdateCondition(kubeclient kubernetes.Interface, pod *corev1.Pod,
 
 		klog.V(3).Infof("Update pod %v %v condition to %v", getPodFullName(pod),
 			tappv1.InPlaceUpdateReady, status)
-		if _, err := kubeclient.CoreV1().Pods(pod.Namespace).UpdateStatus(pod); err != nil && errors.IsConflict(err) {
+		if _, err := kubeclient.CoreV1().Pods(pod.Namespace).UpdateStatus(context.TODO(), pod, metav1.UpdateOptions{}); err != nil && errors.IsConflict(err) {
 			klog.Errorf("Conflict to update pod %v condition, retrying", getPodFullName(pod))
-			newPod, err := kubeclient.CoreV1().Pods(pod.Namespace).Get(pod.Name, metav1.GetOptions{})
+			newPod, err := kubeclient.CoreV1().Pods(pod.Namespace).Get(context.TODO(), pod.Name, metav1.GetOptions{})
 			if err != nil {
 				klog.Errorf("Failed to get pod %v: %v, retrying...", getPodFullName(pod), err)
 			} else {

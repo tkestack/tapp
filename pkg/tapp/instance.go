@@ -18,6 +18,7 @@
 package tapp
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -235,7 +236,7 @@ func (p *InstanceSyncer) deleteInstance(ins *Instance) error {
 	}
 	// This is counted as a delete, even if it fails.
 	if !p.isDying(real.pod) {
-		return p.InstanceClient.Delete(real, nil)
+		return p.InstanceClient.Delete(real, metav1.DeleteOptions{})
 	}
 	klog.V(2).Infof("Waiting on instance %s to die in %v", ins.getName(), real.pod.DeletionTimestamp)
 	return nil
@@ -254,7 +255,7 @@ func (p *InstanceSyncer) forceDeleteInstance(ins *Instance) error {
 		return nil
 	}
 
-	return p.InstanceClient.Delete(real, metav1.NewDeleteOptions(0))
+	return p.InstanceClient.Delete(real, *metav1.NewDeleteOptions(0))
 }
 
 func (p *InstanceSyncer) updateInstance(ins *Instance) error {
@@ -271,7 +272,7 @@ func (p *InstanceSyncer) updateInstance(ins *Instance) error {
 // InstanceClient is a client for managing instances.
 type InstanceClient interface {
 	InstanceHealthChecker
-	Delete(*Instance, *metav1.DeleteOptions) error
+	Delete(*Instance, metav1.DeleteOptions) error
 	Get(*Instance) (*Instance, bool, error)
 	Create(*Instance) error
 	Update(*Instance, *Instance) error
@@ -288,7 +289,7 @@ type ApiServerInstanceClient struct {
 func (p *ApiServerInstanceClient) Get(ins *Instance) (*Instance, bool, error) {
 	found := true
 	ns := ins.parent.Namespace
-	pod, err := podClient(p.KubeClient, ns).Get(ins.pod.Name, metav1.GetOptions{})
+	pod, err := podClient(p.KubeClient, ns).Get(context.TODO(), ins.pod.Name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		found = false
 		err = nil
@@ -301,9 +302,9 @@ func (p *ApiServerInstanceClient) Get(ins *Instance) (*Instance, bool, error) {
 	return &real, true, nil
 }
 
-func (p *ApiServerInstanceClient) Delete(ins *Instance, options *metav1.DeleteOptions) error {
+func (p *ApiServerInstanceClient) Delete(ins *Instance, options metav1.DeleteOptions) error {
 	klog.V(2).Infof("Delete instance %s with option %+v", ins.getName(), options)
-	err := podClient(p.KubeClient, ins.parent.Namespace).Delete(ins.pod.Name, options)
+	err := podClient(p.KubeClient, ins.parent.Namespace).Delete(context.TODO(), ins.pod.Name, options)
 	if errors.IsNotFound(err) {
 		err = nil
 	}
@@ -316,7 +317,7 @@ func (p *ApiServerInstanceClient) Create(ins *Instance) error {
 	if err := p.createPersistentVolumeClaims(ins); err != nil {
 		return err
 	}
-	_, err := podClient(p.KubeClient, ins.parent.Namespace).Create(ins.pod)
+	_, err := podClient(p.KubeClient, ins.parent.Namespace).Create(context.TODO(), ins.pod, metav1.CreateOptions{})
 	p.event(ins.parent, "Create", fmt.Sprintf("Instance: %v", ins.pod.Name), err)
 	return err
 }
@@ -327,7 +328,7 @@ func (p *ApiServerInstanceClient) createPersistentVolumeClaims(ins *Instance) er
 		_, err := p.pvcLister.PersistentVolumeClaims(claim.Namespace).Get(claim.Name)
 		switch {
 		case apierrors.IsNotFound(err):
-			_, createErr := pvcClient(p.KubeClient, claim.Namespace).Create(&claim)
+			_, createErr := pvcClient(p.KubeClient, claim.Namespace).Create(context.TODO(), &claim, metav1.CreateOptions{})
 			if createErr != nil {
 				errs = append(errs, fmt.Errorf("failed to create PVC %s: %s", claim.Name, createErr))
 			}
@@ -423,13 +424,13 @@ func (p *ApiServerInstanceClient) Update(real *Instance, expected *Instance) err
 	for i, rp := 0, real.pod; i <= updateRetries; i++ {
 		mergePod(rp, expected.pod)
 		klog.V(2).Infof("Updating pod %s, pod meta:%+v, pod spec:%+v", getPodFullName(rp), rp.ObjectMeta, rp.Spec)
-		_, err = pc.Update(rp)
+		_, err = pc.Update(context.TODO(), rp, metav1.UpdateOptions{})
 		if err == nil {
 			p.event(real.parent, "Update", fmt.Sprintf("Instance: %v", real.pod.Name), nil)
 			break
 		}
 		klog.Errorf("Failed to update pod %s, will retry: %v", getPodFullName(rp), err)
-		if rp, err = pc.Get(pod.Name, metav1.GetOptions{}); err != nil {
+		if rp, err = pc.Get(context.TODO(), pod.Name, metav1.GetOptions{}); err != nil {
 			break
 		}
 	}
