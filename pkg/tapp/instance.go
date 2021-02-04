@@ -140,13 +140,13 @@ func updateStorage(ins *Instance) {
 	ins.pod.Spec.Volumes = newVolumes
 }
 
-func (p *InstanceSyncer) SyncInstances(add, del, forceDel, update []*Instance) {
+func (syncer *InstanceSyncer) SyncInstances(add, del, forceDel, update []*Instance) {
 	var wg sync.WaitGroup
 	wg.Add(len(add) + len(del) + len(forceDel))
 	for _, instance := range add {
 		go func(instance *Instance) {
 			defer wg.Done()
-			if err := p.createInstance(instance); err != nil {
+			if err := syncer.createInstance(instance); err != nil {
 				klog.Errorf("Failed to createInstance %s: %+v", instance.getName(), err)
 			} else {
 				klog.V(2).Infof("Create instance %s successfully", instance.getName())
@@ -157,7 +157,7 @@ func (p *InstanceSyncer) SyncInstances(add, del, forceDel, update []*Instance) {
 	for _, instance := range del {
 		go func(instance *Instance) {
 			defer wg.Done()
-			if err := p.deleteInstance(instance); err != nil {
+			if err := syncer.deleteInstance(instance); err != nil {
 				klog.Errorf("Failed to delInstance %s: %v", instance.getName(), err)
 			} else {
 				klog.V(2).Infof("Delete instance %s successfully", instance.getName())
@@ -168,7 +168,7 @@ func (p *InstanceSyncer) SyncInstances(add, del, forceDel, update []*Instance) {
 	for _, instance := range forceDel {
 		go func(instance *Instance) {
 			defer wg.Done()
-			if err := p.forceDeleteInstance(instance); err != nil {
+			if err := syncer.forceDeleteInstance(instance); err != nil {
 				klog.Errorf("Failed to forceDelInstance %s: %v", instance.getName(), err)
 			} else {
 				klog.V(2).Infof("Force delete instance %s successfully", instance.getName())
@@ -179,7 +179,7 @@ func (p *InstanceSyncer) SyncInstances(add, del, forceDel, update []*Instance) {
 	wg.Wait()
 
 	for _, instance := range update {
-		if err := p.updateInstance(instance); err != nil {
+		if err := syncer.updateInstance(instance); err != nil {
 			klog.Errorf("Failed to updateInstance %s: %v", instance.getName(), err)
 		} else {
 			klog.V(2).Infof("Update instance %s successfully", instance.getName())
@@ -222,11 +222,11 @@ func addInPlaceUpdateReadinessGate(ins *Instance) {
 }
 
 // Delete deletes the given instance
-func (p *InstanceSyncer) deleteInstance(ins *Instance) error {
+func (syncer *InstanceSyncer) deleteInstance(ins *Instance) error {
 	if ins == nil {
 		return nil
 	}
-	real, exists, err := p.Get(ins)
+	current, exists, err := syncer.Get(ins)
 	if err != nil {
 		return err
 	}
@@ -234,19 +234,19 @@ func (p *InstanceSyncer) deleteInstance(ins *Instance) error {
 		return nil
 	}
 	// This is counted as a delete, even if it fails.
-	if !p.isDying(real.pod) {
-		return p.InstanceClient.Delete(real, nil)
+	if !syncer.isDying(current.pod) {
+		return syncer.InstanceClient.Delete(current, nil)
 	}
-	klog.V(2).Infof("Waiting on instance %s to die in %v", ins.getName(), real.pod.DeletionTimestamp)
+	klog.V(2).Infof("Waiting on instance %s to die in %v", ins.getName(), current.pod.DeletionTimestamp)
 	return nil
 }
 
 // Force delete deletes the given instance
-func (p *InstanceSyncer) forceDeleteInstance(ins *Instance) error {
+func (syncer *InstanceSyncer) forceDeleteInstance(ins *Instance) error {
 	if ins == nil {
 		return nil
 	}
-	real, exists, err := p.Get(ins)
+	current, exists, err := syncer.Get(ins)
 	if err != nil {
 		return err
 	}
@@ -254,18 +254,18 @@ func (p *InstanceSyncer) forceDeleteInstance(ins *Instance) error {
 		return nil
 	}
 
-	return p.InstanceClient.Delete(real, metav1.NewDeleteOptions(0))
+	return syncer.InstanceClient.Delete(current, metav1.NewDeleteOptions(0))
 }
 
-func (p *InstanceSyncer) updateInstance(ins *Instance) error {
-	real, exists, err := p.Get(ins)
+func (syncer *InstanceSyncer) updateInstance(ins *Instance) error {
+	current, exists, err := syncer.Get(ins)
 	if err != nil {
 		return err
 	}
 	if !exists {
 		return fmt.Errorf("instance:%s not exist", ins.getName())
 	}
-	return p.Update(real, ins)
+	return syncer.Update(current, ins)
 }
 
 // InstanceClient is a client for managing instances.
@@ -277,7 +277,7 @@ type InstanceClient interface {
 	Update(*Instance, *Instance) error
 }
 
-// ApiServerinstanceClient is a instance aware Kubernetes client.
+// ApiServerInstanceClient is a instance aware Kubernetes client.
 type ApiServerInstanceClient struct {
 	KubeClient kubernetes.Interface
 	Recorder   record.EventRecorder
@@ -296,9 +296,9 @@ func (p *ApiServerInstanceClient) Get(ins *Instance) (*Instance, bool, error) {
 	if err != nil || !found {
 		return nil, found, err
 	}
-	real := *ins
-	real.pod = pod
-	return &real, true, nil
+	current := *ins
+	current.pod = pod
+	return &current, true, nil
 }
 
 func (p *ApiServerInstanceClient) Delete(ins *Instance, options *metav1.DeleteOptions) error {
@@ -391,49 +391,51 @@ func (p *ApiServerInstanceClient) recordClaimEvent(verb string, ins *Instance, c
 }
 
 // api#validate grants the diff between real and excepted podTemplate are container image
-// note: some admin controll plugins may change pod spec, such as ServiceAccount plugin will add
-// vollumeMount to pod.Spec.Containers, so we couldn't simple use real.Sepc.Containers = expected.Spec.Containers
-func mergePod(real, excepted *corev1.Pod) {
-	newContainers := make([]corev1.Container, len(real.Spec.Containers))
-	for index, container := range real.Spec.Containers {
+// note: some admin control plugins may change pod spec, such as ServiceAccount plugin will add
+// volumeMount to pod.Spec.Containers, so we couldn't simple use current.Sepc.Containers = expected.Spec.Containers
+func mergePod(current, excepted *corev1.Pod) {
+	newContainers := make([]corev1.Container, len(current.Spec.Containers))
+	for index, container := range current.Spec.Containers {
 		if index < len(excepted.Spec.Containers) {
 			e := excepted.Spec.Containers[index]
 			container.Image = e.Image
 		}
 		newContainers[index] = container
 	}
-	real.Spec.Containers = newContainers
+	current.Spec.Containers = newContainers
 	for k, v := range excepted.Labels {
-		real.Labels[k] = v
+		current.Labels[k] = v
 	}
-	if real.Annotations == nil {
-		real.Annotations = make(map[string]string)
+	if current.Annotations == nil {
+		current.Annotations = make(map[string]string)
 	}
 	for k, v := range excepted.Annotations {
-		real.Annotations[k] = v
+		current.Annotations[k] = v
 	}
 }
 
 // TODO: Allow updating for VolumeClaimTemplates?
-func (p *ApiServerInstanceClient) Update(real *Instance, expected *Instance) error {
+func (p *ApiServerInstanceClient) Update(current *Instance, expected *Instance) error {
 	pc := podClient(p.KubeClient, expected.parent.Namespace)
 
-	var err error
-	pod := real.pod
-	for i, rp := 0, real.pod; i <= updateRetries; i++ {
-		mergePod(rp, expected.pod)
-		klog.V(2).Infof("Updating pod %s, pod meta:%+v, pod spec:%+v", getPodFullName(rp), rp.ObjectMeta, rp.Spec)
-		_, err = pc.Update(rp)
+	var err, e error
+	pod := current.pod
+	for i, cp := 0, current.pod; i <= updateRetries; i++ {
+		mergePod(cp, expected.pod)
+		klog.V(2).Infof("Updating pod %s, pod meta:%+v, pod spec:%+v", getPodFullName(cp), cp.ObjectMeta, cp.Spec)
+
+		_, err = pc.Update(cp)
 		if err == nil {
-			p.event(real.parent, "Update", fmt.Sprintf("Instance: %v", real.pod.Name), nil)
 			break
 		}
-		klog.Errorf("Failed to update pod %s, will retry: %v", getPodFullName(rp), err)
-		if rp, err = pc.Get(pod.Name, metav1.GetOptions{}); err != nil {
+		klog.Errorf("Failed to update pod %s, will retry: %v", getPodFullName(cp), err)
+
+		if cp, e = pc.Get(pod.Name, metav1.GetOptions{}); e != nil {
 			break
 		}
 	}
-	p.event(real.parent, "Update", fmt.Sprintf("Instance: %v", real.pod.Name), err)
+
+	p.event(current.parent, "Update", fmt.Sprintf("Instance: %v", current.pod.Name), err)
 	return err
 }
 
