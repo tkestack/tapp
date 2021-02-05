@@ -379,7 +379,7 @@ func (p *ApiServerInstanceClient) recordClaimEvent(verb string, ins *Instance, c
 	err error) {
 	if err == nil {
 		reason := fmt.Sprintf("Successful%s", strings.Title(verb))
-		message := fmt.Sprintf("%s Claim %s Pod %s in StatefulSet %s success",
+		message := fmt.Sprintf("%s Claim %s Pod %s in TApp %s success",
 			strings.ToLower(verb), claim.Name, ins.pod.Name, ins.parent.Name)
 		p.Recorder.Event(ins.parent, corev1.EventTypeNormal, reason, message)
 	} else {
