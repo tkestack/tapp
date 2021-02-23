@@ -42,6 +42,12 @@ const (
 	// updateRetries is the number of Get/Update cycles we perform when an
 	// update fails.
 	updateRetries = 3
+
+	// InPlaceUpdateStateKey records whether instance is in inPlace-updating.
+	InPlaceUpdateStateKey string = "tkestack.io/inplace-update-state"
+
+	// InPlaceUpdateStateValue records the value of InPlaceUpdateStateKey in pod annotations .
+	InPlaceUpdateStateValue string = "true"
 )
 
 // instance is the control block used to transmit all updates about a single instance.
@@ -101,6 +107,13 @@ func newInstance(tapp *tappv1.TApp, id string) (*Instance, error) {
 	updateStorage(ins)
 
 	return ins, nil
+}
+
+func setInPlaceUpdateAnnotation(ins *Instance) {
+	if ins.pod.Annotations == nil {
+		ins.pod.Annotations = map[string]string{}
+	}
+	ins.pod.Annotations[InPlaceUpdateStateKey] = InPlaceUpdateStateValue
 }
 
 func getControllerRef(tapp *tappv1.TApp) *metav1.OwnerReference {
