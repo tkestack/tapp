@@ -19,10 +19,11 @@ package hash
 
 import (
 	"fmt"
+	"hash"
 	"hash/fnv"
 
+	"github.com/davecgh/go-spew/spew"
 	corev1 "k8s.io/api/core/v1"
-	hashutil "k8s.io/kubernetes/pkg/util/hash"
 )
 
 const (
@@ -100,7 +101,7 @@ func (th *defaultTappHash) HashLabels() []string {
 
 func generateHash(template interface{}) uint64 {
 	hasher := fnv.New64()
-	hashutil.DeepHashObject(hasher, template)
+	DeepHashObject(hasher, template)
 	return hasher.Sum64()
 }
 
@@ -132,4 +133,19 @@ func generateUniqHash(template corev1.PodTemplateSpec) string {
 	template.Spec.Containers = newContainers
 
 	return fmt.Sprintf("%d", generateHash(template.Spec))
+}
+
+// DeepHashObject writes specified object to hash using the spew library
+// which follows pointers and prints actual values of the nested objects
+// ensuring the hash does not change when a pointer changes.
+// copy from k8s.io/kubernetes/pkg/util/hash
+func DeepHashObject(hasher hash.Hash, objectToWrite interface{}) {
+	hasher.Reset()
+	printer := spew.ConfigState{
+		Indent:         " ",
+		SortKeys:       true,
+		DisableMethods: true,
+		SpewKeys:       true,
+	}
+	printer.Fprintf(hasher, "%#v", objectToWrite)
 }

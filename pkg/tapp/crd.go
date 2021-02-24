@@ -18,6 +18,7 @@
 package tapp
 
 import (
+	"context"
 	"reflect"
 
 	"tkestack.io/tapp/pkg/apis/tappcontroller"
@@ -63,7 +64,7 @@ var CRD = &extensionsobj.CustomResourceDefinition{
 // 'err' should always be nil, because it is used by wait.PollUntil(), and it will exit if it is not nil.
 func EnsureCRDCreated(client apiextensionsclient.Interface) (created bool, err error) {
 	crdClient := client.ApiextensionsV1beta1().CustomResourceDefinitions()
-	presetCRD, err := crdClient.Get(CRD.Name, metav1.GetOptions{})
+	presetCRD, err := crdClient.Get(context.TODO(), CRD.Name, metav1.GetOptions{})
 	if err == nil {
 		if reflect.DeepEqual(presetCRD.Spec, CRD.Spec) {
 			klog.V(1).Infof("CRD %s already exists", CRD.Name)
@@ -72,7 +73,7 @@ func EnsureCRDCreated(client apiextensionsclient.Interface) (created bool, err e
 			newCRD := CRD
 			newCRD.ResourceVersion = presetCRD.ResourceVersion
 			// Update CRD
-			if _, err := crdClient.Update(newCRD); err != nil {
+			if _, err := crdClient.Update(context.TODO(), newCRD, metav1.UpdateOptions{}); err != nil {
 				klog.Errorf("Error update CRD %s: %v", CRD.Name, err)
 				return false, nil
 			}
@@ -80,7 +81,7 @@ func EnsureCRDCreated(client apiextensionsclient.Interface) (created bool, err e
 		}
 	} else {
 		// If not exist, create a new one
-		if _, err := crdClient.Create(CRD); err != nil {
+		if _, err := crdClient.Create(context.TODO(), CRD, metav1.CreateOptions{}); err != nil {
 			klog.Errorf("Error creating CRD %s: %v", CRD.Name, err)
 			return false, nil
 		}

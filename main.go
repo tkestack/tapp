@@ -40,9 +40,9 @@ import (
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
 	componentbaseconfig "k8s.io/component-base/config"
+	"k8s.io/component-base/config/options"
 	"k8s.io/component-base/logs"
 	"k8s.io/klog"
-	"k8s.io/kubernetes/pkg/client/leaderelectionconfig"
 )
 
 var (
@@ -207,5 +207,5 @@ func addFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&tlsKeyFile, "tlsKeyFile", "/etc/certs/tls.key", "File containing the x509 private key to for HTTPS.")
 	fs.StringVar(&namespace, "namespace", "kube-system", "Namespace to deploy tapp controller")
 
-	leaderelectionconfig.BindFlags(&leaderElection, fs)
+	options.BindLeaderElectionFlags(&leaderElection, fs)
 }
