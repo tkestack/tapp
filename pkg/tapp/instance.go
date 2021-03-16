@@ -295,13 +295,14 @@ type ApiServerInstanceClient struct {
 	KubeClient kubernetes.Interface
 	Recorder   record.EventRecorder
 	pvcLister  corelisters.PersistentVolumeClaimLister
+	podLister  corelisters.PodLister
 	InstanceHealthChecker
 }
 
 func (p *ApiServerInstanceClient) Get(ins *Instance) (*Instance, bool, error) {
 	found := true
 	ns := ins.parent.Namespace
-	pod, err := podClient(p.KubeClient, ns).Get(ins.pod.Name, metav1.GetOptions{})
+	pod, err := p.podLister.Pods(ns).Get(ins.pod.Name)
 	if errors.IsNotFound(err) {
 		found = false
 		err = nil
@@ -429,7 +430,7 @@ func mergePod(current, excepted *corev1.Pod) {
 
 // TODO: Allow updating for VolumeClaimTemplates?
 func (p *ApiServerInstanceClient) Update(current *Instance, expected *Instance) error {
-	pc := podClient(p.KubeClient, expected.parent.Namespace)
+	ns := expected.parent.Namespace
 
 	var err, e error
 	pod := current.pod
@@ -437,13 +438,13 @@ func (p *ApiServerInstanceClient) Update(current *Instance, expected *Instance) 
 		mergePod(cp, expected.pod)
 		klog.V(2).Infof("Updating pod %s, pod meta:%+v, pod spec:%+v", getPodFullName(cp), cp.ObjectMeta, cp.Spec)
 
-		_, err = pc.Update(cp)
+		_, err = podClient(p.KubeClient, ns).Update(cp)
 		if err == nil {
 			break
 		}
 		klog.Errorf("Failed to update pod %s, will retry: %v", getPodFullName(cp), err)
 
-		if cp, e = pc.Get(pod.Name, metav1.GetOptions{}); e != nil {
+		if cp, e = p.podLister.Pods(ns).Get(pod.Name); e != nil {
 			break
 		}
 	}

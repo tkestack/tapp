@@ -105,6 +105,8 @@ type Controller struct {
 	// podStore is a cache of watched pods.
 	podStore corelisters.PodLister
 
+	nodeStore corelisters.NodeLister
+
 	// podStoreSynced returns true if the pod store has synced at least once.
 	podStoreSynced cache.InformerSynced
 
@@ -147,6 +149,7 @@ func NewController(
 				KubeClient:            kubeclientset,
 				Recorder:              recorder,
 				pvcLister:             kubeInformerFactory.Core().V1().PersistentVolumeClaims().Lister(),
+				podLister:             kubeInformerFactory.Core().V1().Pods().Lister(),
 				InstanceHealthChecker: &defaultInstanceHealthChecker{},
 			},
 		},
@@ -163,6 +166,7 @@ func NewController(
 		DeleteFunc: controller.deletePod,
 	})
 	controller.podStore = podInformer.Lister()
+	controller.nodeStore = kubeInformerFactory.Core().V1().Nodes().Lister()
 
 	tappInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: controller.enqueueTApp,
@@ -917,7 +921,7 @@ func isInRollingUpdate(tapp *tappv1.TApp, podId string) bool {
 
 func (c *Controller) needForceDelete(tapp *tappv1.TApp, pod *corev1.Pod) bool {
 	if pod != nil && isPodDying(pod) && tapp.Spec.ForceDeletePod && len(pod.Spec.NodeName) != 0 {
-		node, err := c.kubeclient.CoreV1().Nodes().Get(pod.Spec.NodeName, metav1.GetOptions{})
+		node, err := c.nodeStore.Get(pod.Spec.NodeName)
 		if err != nil {
 			return errors.IsNotFound(err)
 		}
@@ -1102,6 +1106,7 @@ func (c *Controller) updateTAppStatus(tapp *tappv1.TApp, pods []*corev1.Pod) err
 	}
 
 	client := c.tappclient.TappcontrollerV1().TApps(tapp.Namespace)
+	listerClient := c.tappLister.TApps(tapp.Namespace)
 
 	var getErr error
 	var updateErr error
@@ -1121,7 +1126,7 @@ func (c *Controller) updateTAppStatus(tapp *tappv1.TApp, pods []*corev1.Pod) err
 		if updateErr == nil || i >= statusUpdateRetries {
 			return updateErr
 		}
-		if app, getErr = client.Get(app.Name, metav1.GetOptions{}); getErr != nil {
+		if app, getErr = listerClient.Get(app.Name); getErr != nil {
 			return getErr
 		}
 	}
@@ -1148,7 +1153,7 @@ func (c *Controller) syncPodConditions(allPods []*corev1.Pod, notReadyInstances 
 				defer wg.Done()
 				klog.V(4).Infof("Set pod %v %v to false because pod will not be ready",
 					getPodFullName(pod), tappv1.InPlaceUpdateReady)
-				setInPlaceUpdateCondition(c.kubeclient, pod, corev1.ConditionFalse)
+				setInPlaceUpdateCondition(c.kubeclient, c.podStore, pod, corev1.ConditionFalse)
 			}(pod)
 		} else {
 			go func(pod *corev1.Pod) {
@@ -1165,10 +1170,10 @@ func (c *Controller) syncInPlaceUpdateCondition(pod *corev1.Pod) {
 	if pod.Status.Phase == corev1.PodRunning && isUpdating(pod) {
 		status = corev1.ConditionFalse
 	}
-	setInPlaceUpdateCondition(c.kubeclient, pod, status)
+	setInPlaceUpdateCondition(c.kubeclient, c.podStore, pod, status)
 }
 
-func setInPlaceUpdateCondition(kubeclient kubernetes.Interface, pod *corev1.Pod, status corev1.ConditionStatus) {
+func setInPlaceUpdateCondition(kubeclient kubernetes.Interface, podStore corelisters.PodLister, pod *corev1.Pod, status corev1.ConditionStatus) {
 	if kubeclient == nil {
 		klog.V(4).Infof("Skip setInPlaceUpdateCondition because kubeclient is nil")
 		return
@@ -1234,7 +1239,7 @@ func setInPlaceUpdateCondition(kubeclient kubernetes.Interface, pod *corev1.Pod,
 			tappv1.InPlaceUpdateReady, status)
 		if _, err := kubeclient.CoreV1().Pods(pod.Namespace).UpdateStatus(pod); err != nil && errors.IsConflict(err) {
 			klog.Errorf("Conflict to update pod %v condition, retrying", getPodFullName(pod))
-			newPod, err := kubeclient.CoreV1().Pods(pod.Namespace).Get(pod.Name, metav1.GetOptions{})
+			newPod, err := podStore.Pods(pod.Namespace).Get(pod.Name)
 			if err != nil {
 				klog.Errorf("Failed to get pod %v: %v, retrying...", getPodFullName(pod), err)
 			} else {
