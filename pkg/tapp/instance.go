@@ -48,6 +48,9 @@ const (
 
 	// InPlaceUpdateStateValue records the value of InPlaceUpdateStateKey in pod annotations .
 	InPlaceUpdateStateValue string = "true"
+
+	// specialAnnotationKey is some annotations that will not be changed in pod update
+	specialAnnotationKey string = "tkestack.io/portmapping"
 )
 
 // instance is the control block used to transmit all updates about a single instance.
@@ -422,6 +425,11 @@ func mergePod(current, excepted *corev1.Pod) {
 	}
 	if current.Annotations == nil {
 		current.Annotations = make(map[string]string)
+	} else {
+		specialAnnotationValue, ok := current.Annotations[specialAnnotationKey]
+		if ok {
+			excepted.Annotations[specialAnnotationKey] = specialAnnotationValue
+		}
 	}
 	for k, v := range excepted.Annotations {
 		current.Annotations[k] = v
