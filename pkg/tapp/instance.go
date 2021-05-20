@@ -367,8 +367,8 @@ func getPersistentVolumeClaims(ins *Instance) map[string]corev1.PersistentVolume
 	templates := ins.parent.Spec.VolumeClaimTemplates
 	claims := make(map[string]corev1.PersistentVolumeClaim, len(templates))
 	for i := range templates {
-		claim := templates[i]
-		claim.Name = getPersistentVolumeClaimName(ins.parent, &claim, ins.id)
+		claim := templates[i].DeepCopy()
+		claim.Name = getPersistentVolumeClaimName(ins.parent, claim, ins.id)
 		claim.Namespace = ins.parent.Namespace
 		if claim.Labels == nil {
 			claim.Labels = make(map[string]string)
@@ -377,7 +377,7 @@ func getPersistentVolumeClaims(ins *Instance) map[string]corev1.PersistentVolume
 			claim.Labels[labelKey] = labelValue
 		}
 		claim.OwnerReferences = append(claim.OwnerReferences, *getControllerRef(ins.parent))
-		claims[templates[i].Name] = claim
+		claims[templates[i].Name] = *claim
 	}
 	return claims
 }
