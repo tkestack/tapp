@@ -38,8 +38,10 @@ const (
 	validatingWebhookConfiguration = "tapp-admission"
 )
 
-var validatePath = "/validate/tapp"
-var failPolicy admissionregistrationv1beta1.FailurePolicyType = "Fail"
+var (
+	validatePath                                                = "/validate/tapp"
+	failPolicy   admissionregistrationv1beta1.FailurePolicyType = "Fail"
+)
 
 // Register registers the validatingWebhookConfiguration to kube-apiserver
 // Note: always return err as nil, it will be used by wait.PollUntil().
@@ -126,7 +128,7 @@ func NewServer(listenAddress, certFile, keyFile string) (*Server, error) {
 func (ws *Server) Run(stopCh <-chan struct{}) {
 	mux := http.NewServeMux()
 	mux.HandleFunc(validatePath, func(writer http.ResponseWriter, request *http.Request) {
-		Serve(writer, request, admitTApp)
+		Serve(writer, request, validateHandler)
 	})
 
 	server := &http.Server{
@@ -136,7 +138,7 @@ func (ws *Server) Run(stopCh <-chan struct{}) {
 	klog.Fatal(server.ListenAndServeTLS(ws.certFile, ws.keyFile))
 }
 
-func admitTApp(ar *admissionv1beta1.AdmissionReview) *admissionv1beta1.AdmissionResponse {
+func validateHandler(ar *admissionv1beta1.AdmissionReview) *admissionv1beta1.AdmissionResponse {
 	klog.V(4).Info("Admitting tapp")
 
 	reviewResponse := &admissionv1beta1.AdmissionResponse{}
@@ -146,6 +148,11 @@ func admitTApp(ar *admissionv1beta1.AdmissionReview) *admissionv1beta1.Admission
 	raw := ar.Request.Object.Raw
 	if err := json.Unmarshal(raw, &tapp); err != nil {
 		klog.Errorf("Failed to unmarshal tapp from %s: %v", raw, err)
+		return ToAdmissionResponse(err)
+	}
+
+	if err := validate(&tapp); err != nil {
+		klog.Errorf("Failed to validate tapp %v: %v", tapp, err)
 		return ToAdmissionResponse(err)
 	}
 
