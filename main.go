@@ -57,6 +57,8 @@ var (
 	kubeAPIBurst int
 	// TApp sync worker number
 	worker int
+	//informer ResyncDuration
+	resync int
 
 	// Admission related config
 	registerAdmission bool
@@ -80,6 +82,7 @@ var (
 
 const (
 	defaultWorkerNumber = 5
+	defaultResync       = 30
 	defaultKubeAPIQPS   = 2000
 	defaultKubeAPIBurst = 2500
 )
@@ -107,8 +110,8 @@ func main() {
 		klog.Fatalf("Error instantiating apiextensions client: %s", err.Error())
 	}
 
-	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, time.Second*30)
-	tappInformerFactory := informers.NewSharedInformerFactory(tappClient, time.Second*30)
+	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, time.Second*time.Duration(resync))
+	tappInformerFactory := informers.NewSharedInformerFactory(tappClient, time.Second*time.Duration(resync))
 
 	controller := tapp.NewController(kubeClient, tappClient, kubeInformerFactory, tappInformerFactory)
 	run := func(ctx context.Context) {
@@ -198,6 +201,7 @@ func addFlags(fs *pflag.FlagSet) {
 	fs.Float32Var(&kubeAPIQPS, "kube-api-qps", defaultKubeAPIQPS, "QPS to use while talking with kubernetes apiserver")
 	fs.IntVar(&kubeAPIBurst, "kube-api-burst", defaultKubeAPIBurst, "Burst to use while talking with kubernetes apiserver")
 	fs.IntVar(&worker, "worker", defaultWorkerNumber, "TApp sync worker number, default: 5")
+	fs.IntVar(&resync, "resync", defaultResync, "informer ResyncDuration , default: 30")
 
 	// Admission related
 	fs.BoolVar(&registerAdmission, "register-admission", false, "Register admission for tapp controller")
