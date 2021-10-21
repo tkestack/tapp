@@ -442,7 +442,7 @@ func (p *ApiServerInstanceClient) Update(current *Instance, expected *Instance) 
 
 	var err, e error
 	pod := current.pod
-	for i, cp := 0, current.pod; i <= updateRetries; i++ {
+	for i, cp := 0, current.pod.DeepCopy(); i <= updateRetries; i++ {
 		mergePod(cp, expected.pod)
 		klog.V(2).Infof("Updating pod %s, pod meta:%+v, pod spec:%+v", getPodFullName(cp), cp.ObjectMeta, cp.Spec)
 
