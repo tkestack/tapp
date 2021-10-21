@@ -393,16 +393,17 @@ func (c *Controller) Sync(key string) error {
 	if err != nil {
 		return err
 	}
-	tapp, err := c.tappLister.TApps(namespace).Get(name)
+	curTapp, err := c.tappLister.TApps(namespace).Get(name)
 	if errors.IsNotFound(err) {
 		klog.Infof("TApp has been deleted %v", key)
 		return nil
 	}
 	if err != nil {
-		klog.Errorf("Unable to retrieve tapp %s from store: %v", util.GetTAppFullName(tapp), err)
+		klog.Errorf("Unable to retrieve tapp %s from store: %v", util.GetTAppFullName(curTapp), err)
 		return err
 	}
 
+	tapp := curTapp.DeepCopy()
 	err = c.preprocessTApp(tapp)
 	if err != nil {
 		klog.Errorf("Failed to preprocess tapp %s: %v", util.GetTAppFullName(tapp), err)
