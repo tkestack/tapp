@@ -80,6 +80,10 @@ type TAppSpec struct {
 	// other nodes, otherwise it depends on other conditions(e.g. pod restart policy).
 	NeverMigrate bool `json:"neverMigrate,omitempty"`
 
+	// RetainFinishedPod indicates whether to delete pod after all pods are failed or success
+	// Default values is false.
+	RetainFinishedPod bool `json:"retainFinishedPod,omitempty"`
+
 	// volumeClaimTemplates is a list of claims that pods are allowed to reference.
 	// The TApp controller is responsible for mapping network identities to
 	// claims in a way that maintains the identity of a pod. Every claim in

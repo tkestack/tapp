@@ -609,7 +609,7 @@ func getDesiredInstance(tapp *tappv1.TApp) (running, completed sets.String) {
 	}
 
 	// If `deletePodAfterAppFinish` is not enabled, pod will be deleted once instance finishes.
-	if !getDeletePodAfterAppFinish() || isTAppFinished(tapp) {
+	if (!getDeletePodAfterAppFinish() || isTAppFinished(tapp)) && !tapp.Spec.RetainFinishedPod {
 		for id, status := range tapp.Status.Statuses {
 			// Instance finished
 			if status == tappv1.InstanceFailed || status == tappv1.InstanceSucc {
