@@ -442,15 +442,16 @@ func (p *ApiServerInstanceClient) Update(current *Instance, expected *Instance) 
 
 	var err, e error
 	pod := current.pod
-	for i, cp := 0, current.pod.DeepCopy(); i <= updateRetries; i++ {
-		mergePod(cp, expected.pod)
-		klog.V(2).Infof("Updating pod %s, pod meta:%+v, pod spec:%+v", getPodFullName(cp), cp.ObjectMeta, cp.Spec)
+	for i, cp := 0, current.pod; i <= updateRetries; i++ {
+		cpCopy := cp.DeepCopy()
+		mergePod(cpCopy, expected.pod)
+		klog.V(2).Infof("Updating pod %s, pod meta:%+v, pod spec:%+v", getPodFullName(cpCopy), cpCopy.ObjectMeta, cpCopy.Spec)
 
-		_, err = podClient(p.KubeClient, ns).Update(cp)
+		_, err = podClient(p.KubeClient, ns).Update(cpCopy)
 		if err == nil {
 			break
 		}
-		klog.Errorf("Failed to update pod %s, will retry: %v", getPodFullName(cp), err)
+		klog.Errorf("Failed to update pod %s, will retry: %v", getPodFullName(cpCopy), err)
 
 		if cp, e = p.podLister.Pods(ns).Get(pod.Name); e != nil {
 			break
