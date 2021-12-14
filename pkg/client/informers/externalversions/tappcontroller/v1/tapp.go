@@ -19,16 +19,17 @@ limitations under the License.
 package v1
 
 import (
+	"context"
 	time "time"
 
-	tappcontrollerv1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
-	versioned "tkestack.io/tapp/pkg/client/clientset/versioned"
-	internalinterfaces "tkestack.io/tapp/pkg/client/informers/externalversions/internalinterfaces"
-	v1 "tkestack.io/tapp/pkg/client/listers/tappcontroller/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
 	cache "k8s.io/client-go/tools/cache"
+	tappcontrollerv1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
+	versioned "tkestack.io/tapp/pkg/client/clientset/versioned"
+	internalinterfaces "tkestack.io/tapp/pkg/client/informers/externalversions/internalinterfaces"
+	v1 "tkestack.io/tapp/pkg/client/listers/tappcontroller/v1"
 )
 
 // TAppInformer provides access to a shared informer and lister for
@@ -61,13 +62,13 @@ func NewFilteredTAppInformer(client versioned.Interface, namespace string, resyn
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.TappcontrollerV1().TApps(namespace).List(options)
+				return client.TappcontrollerV1().TApps(namespace).List(context.TODO(), options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.TappcontrollerV1().TApps(namespace).Watch(options)
+				return client.TappcontrollerV1().TApps(namespace).Watch(context.TODO(), options)
 			},
 		},
 		&tappcontrollerv1.TApp{},

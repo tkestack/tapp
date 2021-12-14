@@ -18,6 +18,7 @@
 package admission
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -61,7 +62,7 @@ func Register(clientset *kubernetes.Clientset, namespace string, caFile string) 
 		ObjectMeta: metav1.ObjectMeta{
 			Name: validatingWebhookConfiguration,
 		},
-		Webhooks: []admissionregistrationv1beta1.Webhook{
+		Webhooks: []admissionregistrationv1beta1.ValidatingWebhook{
 			{
 				Name: fmt.Sprintf("tapp-controller.%s.svc", namespace),
 				Rules: []admissionregistrationv1beta1.RuleWithOperations{{
@@ -87,17 +88,17 @@ func Register(clientset *kubernetes.Clientset, namespace string, caFile string) 
 	}
 
 	client := clientset.AdmissionregistrationV1beta1().ValidatingWebhookConfigurations()
-	if present, err := client.Get(validatingWebhookConfiguration, metav1.GetOptions{}); err == nil {
+	if present, err := client.Get(context.TODO(), validatingWebhookConfiguration, metav1.GetOptions{}); err == nil {
 		if !reflect.DeepEqual(present.Webhooks, webhookConfig.Webhooks) {
 			klog.V(1).Infof("Update validationWebhookConfiguration from %+v to %+v", present, webhookConfig)
 			webhookConfig.ResourceVersion = present.ResourceVersion
-			if _, err := client.Update(webhookConfig); err != nil {
+			if _, err := client.Update(context.TODO(), webhookConfig, metav1.UpdateOptions{}); err != nil {
 				klog.Errorf("Failed to update validationWebhookConfiguration: %v", err)
 				return false, nil
 			}
 		}
 	} else {
-		if _, err := client.Create(webhookConfig); err != nil {
+		if _, err := client.Create(context.TODO(), webhookConfig, metav1.CreateOptions{}); err != nil {
 			klog.Errorf("Failed to create validatingWebhookConfiguration: %v", err)
 			return false, nil
 		}

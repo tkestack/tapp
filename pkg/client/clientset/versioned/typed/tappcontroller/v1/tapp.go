@@ -19,14 +19,15 @@ limitations under the License.
 package v1
 
 import (
+	"context"
 	"time"
 
-	v1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
-	scheme "tkestack.io/tapp/pkg/client/clientset/versioned/scheme"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
 	rest "k8s.io/client-go/rest"
+	v1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
+	scheme "tkestack.io/tapp/pkg/client/clientset/versioned/scheme"
 )
 
 // TAppsGetter has a method to return a TAppInterface.
@@ -37,15 +38,15 @@ type TAppsGetter interface {
 
 // TAppInterface has methods to work with TApp resources.
 type TAppInterface interface {
-	Create(*v1.TApp) (*v1.TApp, error)
-	Update(*v1.TApp) (*v1.TApp, error)
-	UpdateStatus(*v1.TApp) (*v1.TApp, error)
-	Delete(name string, options *metav1.DeleteOptions) error
-	DeleteCollection(options *metav1.DeleteOptions, listOptions metav1.ListOptions) error
-	Get(name string, options metav1.GetOptions) (*v1.TApp, error)
-	List(opts metav1.ListOptions) (*v1.TAppList, error)
-	Watch(opts metav1.ListOptions) (watch.Interface, error)
-	Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1.TApp, err error)
+	Create(ctx context.Context, tApp *v1.TApp, opts metav1.CreateOptions) (*v1.TApp, error)
+	Update(ctx context.Context, tApp *v1.TApp, opts metav1.UpdateOptions) (*v1.TApp, error)
+	UpdateStatus(ctx context.Context, tApp *v1.TApp, opts metav1.UpdateOptions) (*v1.TApp, error)
+	Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error
+	DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error
+	Get(ctx context.Context, name string, opts metav1.GetOptions) (*v1.TApp, error)
+	List(ctx context.Context, opts metav1.ListOptions) (*v1.TAppList, error)
+	Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.TApp, err error)
 	TAppExpansion
 }
 
@@ -64,20 +65,20 @@ func newTApps(c *TappcontrollerV1Client, namespace string) *tApps {
 }
 
 // Get takes name of the tApp, and returns the corresponding tApp object, and an error if there is any.
-func (c *tApps) Get(name string, options metav1.GetOptions) (result *v1.TApp, err error) {
+func (c *tApps) Get(ctx context.Context, name string, options metav1.GetOptions) (result *v1.TApp, err error) {
 	result = &v1.TApp{}
 	err = c.client.Get().
 		Namespace(c.ns).
 		Resource("tapps").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // List takes label and field selectors, and returns the list of TApps that match those selectors.
-func (c *tApps) List(opts metav1.ListOptions) (result *v1.TAppList, err error) {
+func (c *tApps) List(ctx context.Context, opts metav1.ListOptions) (result *v1.TAppList, err error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
@@ -88,13 +89,13 @@ func (c *tApps) List(opts metav1.ListOptions) (result *v1.TAppList, err error) {
 		Resource("tapps").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Watch returns a watch.Interface that watches the requested tApps.
-func (c *tApps) Watch(opts metav1.ListOptions) (watch.Interface, error) {
+func (c *tApps) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
@@ -105,87 +106,90 @@ func (c *tApps) Watch(opts metav1.ListOptions) (watch.Interface, error) {
 		Resource("tapps").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Watch()
+		Watch(ctx)
 }
 
 // Create takes the representation of a tApp and creates it.  Returns the server's representation of the tApp, and an error, if there is any.
-func (c *tApps) Create(tApp *v1.TApp) (result *v1.TApp, err error) {
+func (c *tApps) Create(ctx context.Context, tApp *v1.TApp, opts metav1.CreateOptions) (result *v1.TApp, err error) {
 	result = &v1.TApp{}
 	err = c.client.Post().
 		Namespace(c.ns).
 		Resource("tapps").
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(tApp).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Update takes the representation of a tApp and updates it. Returns the server's representation of the tApp, and an error, if there is any.
-func (c *tApps) Update(tApp *v1.TApp) (result *v1.TApp, err error) {
+func (c *tApps) Update(ctx context.Context, tApp *v1.TApp, opts metav1.UpdateOptions) (result *v1.TApp, err error) {
 	result = &v1.TApp{}
 	err = c.client.Put().
 		Namespace(c.ns).
 		Resource("tapps").
 		Name(tApp.Name).
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(tApp).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-
-func (c *tApps) UpdateStatus(tApp *v1.TApp) (result *v1.TApp, err error) {
+func (c *tApps) UpdateStatus(ctx context.Context, tApp *v1.TApp, opts metav1.UpdateOptions) (result *v1.TApp, err error) {
 	result = &v1.TApp{}
 	err = c.client.Put().
 		Namespace(c.ns).
 		Resource("tapps").
 		Name(tApp.Name).
 		SubResource("status").
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(tApp).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Delete takes name of the tApp and deletes it. Returns an error if one occurs.
-func (c *tApps) Delete(name string, options *metav1.DeleteOptions) error {
+func (c *tApps) Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error {
 	return c.client.Delete().
 		Namespace(c.ns).
 		Resource("tapps").
 		Name(name).
-		Body(options).
-		Do().
+		Body(&opts).
+		Do(ctx).
 		Error()
 }
 
 // DeleteCollection deletes a collection of objects.
-func (c *tApps) DeleteCollection(options *metav1.DeleteOptions, listOptions metav1.ListOptions) error {
+func (c *tApps) DeleteCollection(ctx context.Context, opts metav1.DeleteOptions, listOpts metav1.ListOptions) error {
 	var timeout time.Duration
-	if listOptions.TimeoutSeconds != nil {
-		timeout = time.Duration(*listOptions.TimeoutSeconds) * time.Second
+	if listOpts.TimeoutSeconds != nil {
+		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
 	}
 	return c.client.Delete().
 		Namespace(c.ns).
 		Resource("tapps").
-		VersionedParams(&listOptions, scheme.ParameterCodec).
+		VersionedParams(&listOpts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Body(options).
-		Do().
+		Body(&opts).
+		Do(ctx).
 		Error()
 }
 
 // Patch applies the patch and returns the patched tApp.
-func (c *tApps) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1.TApp, err error) {
+func (c *tApps) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts metav1.PatchOptions, subresources ...string) (result *v1.TApp, err error) {
 	result = &v1.TApp{}
 	err = c.client.Patch(pt).
 		Namespace(c.ns).
 		Resource("tapps").
-		SubResource(subresources...).
 		Name(name).
+		SubResource(subresources...).
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(data).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
