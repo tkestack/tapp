@@ -23,13 +23,13 @@ import (
 	sync "sync"
 	time "time"
 
-	versioned "tkestack.io/tapp/pkg/client/clientset/versioned"
-	internalinterfaces "tkestack.io/tapp/pkg/client/informers/externalversions/internalinterfaces"
-	tappcontroller "tkestack.io/tapp/pkg/client/informers/externalversions/tappcontroller"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
+	versioned "tkestack.io/tapp/pkg/client/clientset/versioned"
+	internalinterfaces "tkestack.io/tapp/pkg/client/informers/externalversions/internalinterfaces"
+	tappcontroller "tkestack.io/tapp/pkg/client/informers/externalversions/tappcontroller"
 )
 
 // SharedInformerOption defines the functional option type for SharedInformerFactory.

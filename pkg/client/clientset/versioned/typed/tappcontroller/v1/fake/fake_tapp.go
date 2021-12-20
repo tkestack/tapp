@@ -19,13 +19,15 @@ limitations under the License.
 package fake
 
 import (
-	tappcontrollerv1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
+	"context"
+
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
 	testing "k8s.io/client-go/testing"
+	tappcontrollerv1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
 )
 
 // FakeTApps implements TAppInterface
@@ -39,7 +41,7 @@ var tappsResource = schema.GroupVersionResource{Group: "tappcontroller.k8s.io", 
 var tappsKind = schema.GroupVersionKind{Group: "tappcontroller.k8s.io", Version: "v1", Kind: "TApp"}
 
 // Get takes name of the tApp, and returns the corresponding tApp object, and an error if there is any.
-func (c *FakeTApps) Get(name string, options v1.GetOptions) (result *tappcontrollerv1.TApp, err error) {
+func (c *FakeTApps) Get(ctx context.Context, name string, options v1.GetOptions) (result *tappcontrollerv1.TApp, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewGetAction(tappsResource, c.ns, name), &tappcontrollerv1.TApp{})
 
@@ -50,7 +52,7 @@ func (c *FakeTApps) Get(name string, options v1.GetOptions) (result *tappcontrol
 }
 
 // List takes label and field selectors, and returns the list of TApps that match those selectors.
-func (c *FakeTApps) List(opts v1.ListOptions) (result *tappcontrollerv1.TAppList, err error) {
+func (c *FakeTApps) List(ctx context.Context, opts v1.ListOptions) (result *tappcontrollerv1.TAppList, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewListAction(tappsResource, tappsKind, c.ns, opts), &tappcontrollerv1.TAppList{})
 
@@ -72,14 +74,14 @@ func (c *FakeTApps) List(opts v1.ListOptions) (result *tappcontrollerv1.TAppList
 }
 
 // Watch returns a watch.Interface that watches the requested tApps.
-func (c *FakeTApps) Watch(opts v1.ListOptions) (watch.Interface, error) {
+func (c *FakeTApps) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
 		InvokesWatch(testing.NewWatchAction(tappsResource, c.ns, opts))
 
 }
 
 // Create takes the representation of a tApp and creates it.  Returns the server's representation of the tApp, and an error, if there is any.
-func (c *FakeTApps) Create(tApp *tappcontrollerv1.TApp) (result *tappcontrollerv1.TApp, err error) {
+func (c *FakeTApps) Create(ctx context.Context, tApp *tappcontrollerv1.TApp, opts v1.CreateOptions) (result *tappcontrollerv1.TApp, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewCreateAction(tappsResource, c.ns, tApp), &tappcontrollerv1.TApp{})
 
@@ -90,7 +92,7 @@ func (c *FakeTApps) Create(tApp *tappcontrollerv1.TApp) (result *tappcontrollerv
 }
 
 // Update takes the representation of a tApp and updates it. Returns the server's representation of the tApp, and an error, if there is any.
-func (c *FakeTApps) Update(tApp *tappcontrollerv1.TApp) (result *tappcontrollerv1.TApp, err error) {
+func (c *FakeTApps) Update(ctx context.Context, tApp *tappcontrollerv1.TApp, opts v1.UpdateOptions) (result *tappcontrollerv1.TApp, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewUpdateAction(tappsResource, c.ns, tApp), &tappcontrollerv1.TApp{})
 
@@ -102,7 +104,7 @@ func (c *FakeTApps) Update(tApp *tappcontrollerv1.TApp) (result *tappcontrollerv
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeTApps) UpdateStatus(tApp *tappcontrollerv1.TApp) (*tappcontrollerv1.TApp, error) {
+func (c *FakeTApps) UpdateStatus(ctx context.Context, tApp *tappcontrollerv1.TApp, opts v1.UpdateOptions) (*tappcontrollerv1.TApp, error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewUpdateSubresourceAction(tappsResource, "status", c.ns, tApp), &tappcontrollerv1.TApp{})
 
@@ -113,7 +115,7 @@ func (c *FakeTApps) UpdateStatus(tApp *tappcontrollerv1.TApp) (*tappcontrollerv1
 }
 
 // Delete takes name of the tApp and deletes it. Returns an error if one occurs.
-func (c *FakeTApps) Delete(name string, options *v1.DeleteOptions) error {
+func (c *FakeTApps) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
 		Invokes(testing.NewDeleteAction(tappsResource, c.ns, name), &tappcontrollerv1.TApp{})
 
@@ -121,15 +123,15 @@ func (c *FakeTApps) Delete(name string, options *v1.DeleteOptions) error {
 }
 
 // DeleteCollection deletes a collection of objects.
-func (c *FakeTApps) DeleteCollection(options *v1.DeleteOptions, listOptions v1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(tappsResource, c.ns, listOptions)
+func (c *FakeTApps) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
+	action := testing.NewDeleteCollectionAction(tappsResource, c.ns, listOpts)
 
 	_, err := c.Fake.Invokes(action, &tappcontrollerv1.TAppList{})
 	return err
 }
 
 // Patch applies the patch and returns the patched tApp.
-func (c *FakeTApps) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *tappcontrollerv1.TApp, err error) {
+func (c *FakeTApps) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *tappcontrollerv1.TApp, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewPatchSubresourceAction(tappsResource, c.ns, name, pt, data, subresources...), &tappcontrollerv1.TApp{})
 
