@@ -22,7 +22,7 @@ import (
 	"strconv"
 
 	v1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
-	"tkestack.io/tapp/pkg/hash"
+	hashv1 "tkestack.io/tapp/pkg/hash/v1"
 	"tkestack.io/tapp/pkg/util"
 
 	corev1 "k8s.io/api/core/v1"
@@ -35,7 +35,7 @@ const (
 	FakeLabelValue = "fake_tapp_label_value"
 )
 
-var tappHash = hash.NewTappHash()
+var tappHash = hashv1.NewTappHash()
 
 func AddPodTemplate(tapp *v1.TApp, templateName string, template *corev1.PodTemplateSpec) error {
 	template = template.DeepCopy()

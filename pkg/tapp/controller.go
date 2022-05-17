@@ -31,6 +31,8 @@ import (
 	informers "tkestack.io/tapp/pkg/client/informers/externalversions"
 	listers "tkestack.io/tapp/pkg/client/listers/tappcontroller/v1"
 	"tkestack.io/tapp/pkg/hash"
+	hashv1 "tkestack.io/tapp/pkg/hash/v1"
+	hashv2 "tkestack.io/tapp/pkg/hash/v2"
 	"tkestack.io/tapp/pkg/util"
 
 	corev1 "k8s.io/api/core/v1"
@@ -141,7 +143,6 @@ func NewController(
 		tappclient:  tappclientset,
 		tappLister:  tappInformer.Lister(),
 		tappsSynced: tappInformer.Informer().HasSynced,
-		tappHash:    hash.NewTappHash(),
 		workqueue:   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "TApps"),
 		recorder:    recorder,
 		syncer: InstanceSyncer{
@@ -535,8 +536,9 @@ func (c *Controller) removeUnusedTemplate(tapp *tappv1.TApp) error {
 // updateTemplateHash will generate and update templates hash if needed.
 func (c *Controller) updateTemplateHash(tapp *tappv1.TApp) {
 	updateHash := func(template *corev1.PodTemplateSpec) {
-		if c.tappHash.SetTemplateHash(template) {
-			c.tappHash.SetUniqHash(template)
+		tappHash := c.getTappHasher(template)
+		if tappHash.SetTemplateHash(template) {
+			tappHash.SetUniqHash(template)
 		}
 	}
 
@@ -564,7 +566,7 @@ func (c *Controller) setLabelSelector(tapp *tappv1.TApp) error {
 	for k, v := range labels {
 		tappLabels[k] = v
 	}
-	for _, label := range c.tappHash.HashLabels() {
+	for _, label := range util.AllHashLabels() {
 		delete(tappLabels, label)
 	}
 
@@ -935,29 +937,41 @@ func (c *Controller) needForceDelete(tapp *tappv1.TApp, pod *corev1.Pod) bool {
 	return false
 }
 
-func (c *Controller) isTemplateHashChanged(tapp *tappv1.TApp, podId string, pod *corev1.Pod) bool {
-	hash := c.tappHash.GetTemplateHash(pod.Labels)
+func (c *Controller) getTappHasher(template *corev1.PodTemplateSpec) hash.TappHashInterface {
+	if template.Labels[hashv1.TemplateHashKey] != "" {
+		return hashv1.NewTappHash()
+	} else {
+		return hashv2.NewTappHash()
+	}
+}
 
+func (c *Controller) isTemplateHashChanged(tapp *tappv1.TApp, podId string, pod *corev1.Pod) bool {
 	template, err := getPodTemplate(&tapp.Spec, podId)
 	if err != nil {
 		klog.Errorf("Failed to get pod template for %s from tapp %s", getPodFullName(pod),
 			util.GetTAppFullName(tapp))
 		return true
 	}
-	expected := c.tappHash.GetTemplateHash(template.Labels)
-	return hash != expected
+
+	tappHash := c.getTappHasher(template)
+	expected := tappHash.GetTemplateHash(template.Labels)
+	got := tappHash.GetTemplateHash(pod.Labels)
+
+	return got != expected
 }
 
 func (c *Controller) isUniqHashChanged(tapp *tappv1.TApp, podId string, pod *corev1.Pod) bool {
-	hash := c.tappHash.GetUniqHash(pod.Labels)
 	template, err := getPodTemplate(&tapp.Spec, podId)
 	if err != nil {
 		klog.Errorf("Failed to get pod template for %s from tapp %s", getPodFullName(pod),
 			util.GetTAppFullName(tapp))
 		return true
 	}
-	expected := c.tappHash.GetUniqHash(template.Labels)
-	return hash != expected
+	tappHash := c.getTappHasher(template)
+	expected := tappHash.GetUniqHash(template.Labels)
+	got := tappHash.GetUniqHash(pod.Labels)
+
+	return got != expected
 }
 
 func getInstanceStatus(tapp *tappv1.TApp, pods []*corev1.Pod) map[string]tappv1.InstanceStatus {

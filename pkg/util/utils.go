@@ -21,7 +21,8 @@ import (
 	"fmt"
 
 	v1 "tkestack.io/tapp/pkg/apis/tappcontroller/v1"
-	"tkestack.io/tapp/pkg/hash"
+	hashv1 "tkestack.io/tapp/pkg/hash/v1"
+	hashv2 "tkestack.io/tapp/pkg/hash/v2"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -40,12 +41,19 @@ func GenerateTAppSelector(labels map[string]string) *metav1.LabelSelector {
 	for k, v := range labels {
 		tappLabels[k] = v
 	}
-	delete(tappLabels, hash.TemplateHashKey)
-	delete(tappLabels, hash.UniqHashKey)
+	for _, label := range AllHashLabels() {
+		delete(tappLabels, label)
+	}
 
 	return &metav1.LabelSelector{
 		MatchLabels: tappLabels,
 	}
+}
+
+func AllHashLabels() []string {
+	l1 := hashv1.NewTappHash().HashLabels()
+	l2 := hashv2.NewTappHash().HashLabels()
+	return append(l1, l2...)
 }
 
 func GetPodFromTemplate(template *corev1.PodTemplateSpec, parentObject runtime.Object,
